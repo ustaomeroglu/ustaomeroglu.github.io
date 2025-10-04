@@ -782,12 +782,11 @@ body {
 .focus-entry {
     display: flex;
     align-items: flex-start;
-    padding: 12px 0;
-    border-bottom: 1px solid rgba(0, 102, 255, 0.12);
+    padding: 8px 0;
 }
 
 .focus-entry + .focus-entry {
-    margin-top: 18px;
+    margin-top: 6px;
 }
 
 .focus-entry:last-of-type {
@@ -842,6 +841,7 @@ body {
     color: var(--text-primary);
     margin-bottom: 15px;
     line-height: 1.4;
+    scroll-margin-top: 100px;
 }
 
 .project-meta {
@@ -870,7 +870,7 @@ body {
 
 .project-summary em {
     font-style: italic;
-    color: var(--primary-blue);
+    color: inherit;
     font-weight: 500;
 }
 
@@ -980,7 +980,8 @@ body {
     }
 
     .focus-entry {
-        padding: 10px 0;
+        padding: 8px 0;
+        margin-top: 6px;
     }
 
     .focus-entry-link {
