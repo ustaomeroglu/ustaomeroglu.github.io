@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Research - Muhammed Ustaomeroglu</title>
+    
+    <!-- SEO Meta Tags -->
+    <meta name="description" content="Research and Publications - Muhammed Ustaomeroglu, PhD Candidate at Carnegie Mellon University">
+    <meta name="keywords" content="Muhammed Ustaomeroglu, Research, Publications, Carnegie Mellon, Deep Learning, AI Research, Self-Attention, Language Models">
+    <meta name="author" content="Muhammed Ustaomeroglu">
+    
+    <!-- No favicon to prevent default browser icon -->
+    <link rel="icon" href="data:,"><?php // Prevents 404 for favicon ?>
+    
+    <!-- Link to external CSS file -->
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+    <!-- Navigation -->
+    <nav class="navbar">
+        <div class="nav-container">
+            <div class="nav-logo"></div>
+            <ul class="nav-menu">
+                <li><a href="index.html" class="nav-link">Home</a></li>
+                <li><a href="research.html" class="nav-link active">Research</a></li>
+                <li><a href="contact.html" class="nav-link">Contact</a></li>
+            </ul>
+            <div class="mobile-menu-toggle">
+                <span></span>
+                <span></span>
+                <span></span>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Container -->
+    <div class="main-container">
+        <!-- Research Content -->
+        <section class="research-content">
+            <div class="research-document">
+                <h1 class="document-title">PhD Research</h1>
+                
+                <div class="research-focus">
+                    <div class="focus-summary">
+                        <div class="focus-entry">
+                            <a class="focus-entry-link" href="#language-model-planning" aria-label="Go to Language Model Planning section">→</a>
+                            <span class="focus-entry-text">Develop high-level theoretical frameworks to understand and guide the design of large-language models. For instance, information-theoretic pipelines to probe how language models <em>plan</em> their outputs, quantifying horizon, branching, and history dependencies across tasks.</span>
+                        </div>
+                        <div class="focus-entry">
+                            <a class="focus-entry-link" href="#hyper-self-attention" aria-label="Go to Mechanistic Transformer Analysis section">→</a>
+                            <span class="focus-entry-text">Perform mechanistic, block-level analyses of Transformer components, proving convergence and generalization properties and introducing novel self attention variants.</span>
+                        </div>
+                        <div class="focus-entry">
+                            <a class="focus-entry-link" href="#hyper-feature-attention" aria-label="Go to Theory-Inspired Architectures section">→</a>
+                            <span class="focus-entry-text">Propose and empirically validate new model architectures inspired by theoretical insights.</span>
+                        </div>
+                        <div class="focus-entry">
+                            <a class="focus-entry-link" href="#multi-agent-control" aria-label="Go to Long-Horizon Multi-Agent Control section">→</a>
+                            <span class="focus-entry-text">Formalize long-horizon dependencies in multi-agent networked control and analyze the capacity of Transformer-based policies to capture and exploit long-range interactions.</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="research-projects">
+                    
+                    <div class="project">
+                        <h3 id="hyper-self-attention" class="project-title">A Theoretical Study of (Hyper) Self-Attention through the Lens of Interactions</h3>
+                        <div class="project-meta">
+                            <p><strong>Muhammed Ustaomeroglu</strong>, Guannan Qu</p>
+                            <p><em>International Conference on Machine Learning (ICML), 2025</em> <a href="https://arxiv.org/abs/2506.06179" class="paper-link">[Paper]</a></p>
+                        </div>
+                        <ul class="project-summary">
+                            <li>Developed a unified interacting-entities framework for self-attention, demonstrating its applicability across multi agent settings, genotype-phenotype mapping, vision tasks, and time-series prediction.</li>
+                            <li>Proved that single-layer linear attention efficiently represents and learns entity interactions, with provable gradient-flow convergence and out-of-distribution (length) generalization.</li>
+                            <li>Introduced and theoretically analyzed two novel attention mechanisms, HyperFeatureAttention for feature coupling and HyperAttention for higher-order entity interactions, and validated them through preliminary experiments.</li>
+                        </ul>
+                    </div>
+
+                    <div class="project">
+                        <h3 id="language-model-planning" class="project-title">Language Model Planning from an Information-Theoretic Perspective</h3>
+                        <div class="project-meta">
+                            <p><strong>Muhammed Ustaomeroglu</strong>, Baris Askin, Gauri Joshi, Carlee Joe-Wong, Guannan Qu</p>
+                            <p><em>Under review </em><a href="https://arxiv.org/abs/2509.25260" class="paper-link">[Paper]</a></p>
+                        </div>
+                        <ul class="project-summary">
+                            <li>Introduced an information-theoretic pipeline that compresses neural network hidden states into compact codes with VQ-VAEs, allowing systematic measurement of information flow inside language models (LMs).</li>
+                            <li>Investigated how LMs plan their outputs across tasks (formal grammar, graph path-finding, and natural text), with emphasis on three key aspects of planning: <em>horizon</em> (how far ahead they plan), <em>branching</em> (whether they keep multiple alternatives in mind), and <em>history</em> (how much they reuse earlier computations), with a side comparison of next- vs. multi-token training.</li>
+                            <li>Found that planning horizons vary by task, models preserve alternative continuations, and next-token predictions rely mainly on recent states but still draw on earlier layers. Multi-token prediction training modestly reduces this myopia. These findings advance interpretability and inform principled LM design.</li>
+                        </ul>
+                    </div>
+
+                    <div class="project">
+                        <h3 id="hyper-feature-attention" class="project-title">Hyper-Feature Attention</h3>
+                        <div class="project-meta">
+                            <p><em>Work in progress</em></p>
+                        </div>
+                        <ul class="project-summary">
+                            <li>Developing and ablating several Hyper-Feature Attention designs: mixed-order heads, optional hyper-value branches, skip-residual stabilization, etc.</li>
+                            <li>Building a Chinchilla-style compute-matched framework to chart Hyper-Feature Attention scaling laws against conventional Transformer architectures.</li>
+                        </ul>
+                    </div>
+
+                    <div class="project">
+                        <h3 id="multi-agent-control" class="project-title">Long-Range Networked Multi Agent Control</h3>
+                        <div class="project-meta">
+                            <p><em>Work in progress</em></p>
+                        </div>
+                        <ul class="project-summary">
+                            <li>Formalising a measure of long-range/long-horizon dependencies in a multi agent network.</li>
+                            <li>Probing how standard and modified Transformers internalize these dependencies.</li>
+                        </ul>
+                    </div>
+                    
+
+                </div>
+            </div>
+        </section>
+    </div>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <p>&copy; 2025 Muhammed Ustaomeroglu. All rights reserved.</p>
+    </footer>
+
+    <!-- Link to external JavaScript file -->
+    <script src="js/script.js"></script>
+</body>
+</html>
