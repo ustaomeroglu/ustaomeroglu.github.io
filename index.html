@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Muhammed Ustaomeroglu</title>
+
+    <!-- SEO Meta Tags -->
+    <meta name="description" content="Muhammed Ustaomeroglu - PhD Candidate at Carnegie Mellon University specializing in theoretical foundations of deep learning">
+    <meta name="keywords" content="Muhammed Ustaomeroglu, PhD, Carnegie Mellon, Deep Learning Theory, Large Language Models, AI Research">
+    <meta name="author" content="Muhammed Ustaomeroglu">
+
+    <!-- Open Graph Meta Tags -->
+    <meta property="og:title" content="Muhammed Ustaomeroglu">
+    <meta property="og:description" content="PhD Candidate at Carnegie Mellon University specializing in theoretical foundations of deep learning">
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://ustaomeroglu.github.io">
+
+    <!-- No favicon to prevent default browser icon -->
+    <link rel="icon" href="data:,">
+
+    <!-- Link to external CSS file -->
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+    <!-- Navigation -->
+    <nav class="navbar">
+        <div class="nav-container">
+            <a href="#about" class="nav-logo">Muhammed Ustaomeroglu</a>
+            <ul class="nav-menu">
+                <li><a href="#about" class="nav-link active">About</a></li>
+                <li><a href="#research" class="nav-link">Research</a></li>
+                <li><a href="#contact" class="nav-link">Contact</a></li>
+            </ul>
+            <div class="mobile-menu-toggle">
+                <span></span>
+                <span></span>
+                <span></span>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Hero / Home -->
+    <header id="about" class="hero">
+        <div class="wrap">
+            <div class="hero-grid">
+                <div class="hero-content">
+                    <h1 class="hero-name">Muhammed Ustaomeroglu</h1>
+
+                    <p class="hero-description">
+                        Hi, I'm a third-year PhD candidate at <a href="https://www.cmu.edu" target="_blank" rel="noopener">Carnegie Mellon University</a>, advised by <a href="https://www.guannanqu.com" target="_blank" rel="noopener">Guannan Qu</a>. I am interested in understanding the working mechanisms of neural networks (LLMs, RL agents, or any neural network), finding governing "laws" analogous to those in physics, and translating those insights into practical innovations that improve these models and make them safer.
+                    </p>
+
+                    <p class="hero-description">
+                        I received bachelor's degrees from both Physics and Electrical &amp; Electronic Departments at <a href="https://w3.bilkent.edu.tr/bilkent/" target="_blank" rel="noopener">Bilkent University</a>. During my time at Bilkent, I worked on diverse research areas including quantum information theory, general relativity, and photonics. It doesn't directly guide my work, but it does make me "hallucinate" odd hypotheses; most don't work :(. Before CMU and Bilkent, I went to high school at <a href="https://trabzonfenlisesi.meb.k12.tr" target="_blank" rel="noopener">Trabzon Lisesi</a> (est. 1887).
+                    </p>
+
+                    <div class="hero-actions">
+                        <a href="docs/resume_no_phone.pdf" class="btn btn-primary" target="_blank" rel="noopener">
+                            <svg width="20" height="20" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clip-rule="evenodd" />
+                            </svg>
+                            Resume
+                        </a>
+                        <a href="#contact" class="btn btn-secondary">Get in Touch</a>
+                    </div>
+                </div>
+
+                <div class="hero-image">
+                    <div class="profile-container">
+                        <img id="profileImage" src="" alt="Muhammed Ustaomeroglu" class="profile-photo" style="display: none;">
+                        <div id="loadingPlaceholder" class="loading">Loading...</div>
+                        <div class="profile-bg"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <main>
+        <!-- Research -->
+        <section id="research" class="reveal">
+            <div class="wrap">
+                <h2>Research</h2>
+
+                <div class="research-theme">
+                    <h3 class="theme-title">Towards an Effective Theory of LLMs</h3>
+                    <p>
+                        I take an <em>effective theory</em> perspective on large language models: I look for a compact, macro-level description of their computation that abstracts away from microscopic detail, evolves under approximately closed dynamics (its macro-variables can be propagated forward without tracking the underlying activations), and is useful enough to explain, predict, and steer behavior.
+                    </p>
+                    <p>
+                        One instantiation is <strong>Representational Effective Theory (RET)</strong>, where we learn these macro-variables representationally and entirely unsupervised, with no task labels. RET yields interpretable "mental state" trajectories, supports early prediction of behaviors such as sycophancy, and provides causal handles for steering. See the <a href="https://arxiv.org/abs/2605.09294" target="_blank" rel="noopener">paper</a> and <a href="https://ustaomeroglu.github.io/RET/" target="_blank" rel="noopener">project page</a>.
+                    </p>
+                    <p>
+                        A closely related work learns the macro-variables we call the <strong>"plan"</strong>, studying how language models plan their outputs from an information-theoretic perspective: how far ahead they look (horizon), whether they keep alternatives open (branching), and how much they reuse earlier computation (history). See the <a href="https://arxiv.org/abs/2509.25260" target="_blank" rel="noopener">paper</a> (ICLR 2026).
+                    </p>
+                </div>
+
+                <div class="research-theme">
+                    <h3 class="theme-title">Making LLMs Safer</h3>
+                    <p>
+                        A second, more applied line of my work aims at making LLMs safer. Here I study <em>emergent misalignment</em>, where fine-tuning on a narrow objective spills over into broadly harmful behavior. In <strong>BLOCK-EM</strong>, we trace this behavior to a small set of internal features and, during fine-tuning, block the model from strengthening them, cutting emergent misalignment by up to 95% with no loss in task performance. See the <a href="https://arxiv.org/abs/2602.00767" target="_blank" rel="noopener">paper</a> (ICML 2026).
+                    </p>
+                    <p>
+                        We also study why misalignment arises in the first place, framing both emergent misalignment and its subtler, <em>subliminal</em> form as a shared, data-mediated phenomenon, and showing how dataset structure, task difficulty, and model capability together decide whether it emerges. See the <a href="https://arxiv.org/abs/2605.12798" target="_blank" rel="noopener">paper</a> (under review).
+                    </p>
+                </div>
+
+                <div class="research-theme">
+                    <h3 class="theme-title">Theory-Driven Architectures</h3>
+                    <p>
+                        This third line is more mathematical, aimed first at a rigorous understanding of attention. Through an <em>interacting-entities</em> perspective, we show that self-attention can represent any interaction among entities and can learn it: gradient flow provably converges to such a solution, which generalizes both in-distribution and out-of-distribution (for instance, to longer sequences). The same perspective points to new mechanisms, HyperFeatureAttention for feature coupling and HyperAttention for higher-order interactions, validated in preliminary experiments. See the <a href="https://arxiv.org/abs/2506.06179" target="_blank" rel="noopener">paper</a> (ICML 2025).
+                    </p>
+                    <p>
+                        I am now developing these designs further, ablating Hyper-Feature Attention variants (mixed-order heads, optional hyper-value branches, skip-residual stabilization) and building a Chinchilla-style, compute-matched framework to chart their scaling laws against standard Transformers.
+                    </p>
+                </div>
+
+                <div class="research-theme reveal">
+                    <h3 class="theme-title">Other Work</h3>
+                    <p>
+                        Alongside these threads, I work on a few other problems, including scalable multi-agent reinforcement learning over networked systems, where Transformers capture the long-range, long-horizon interactions between agents (best student paper at the European Control Conference, ECC 2026; see the <a href="https://arxiv.org/abs/2511.13103" target="_blank" rel="noopener">paper</a>), and federated reinforcement learning that coordinates training across separate data sources. For these and other papers, see my <a href="https://scholar.google.com/citations?user=1WDPhFMAAAAJ&hl=en" target="_blank" rel="noopener">Google Scholar</a>.
+                    </p>
+                </div>
+            </div>
+        </section>
+
+        <!-- Contact -->
+        <section id="contact" class="reveal">
+            <div class="wrap">
+                <h2>Get in Touch</h2>
+
+                <p class="contact-note">
+                    I'm always happy to hear from anyone interested in collaborating. Just send a short email about the topics you're most interested in (general or specific is fine).
+                </p>
+
+                <div class="contact-icons">
+                    <a href="mailto:mustaome@andrew.cmu.edu" class="contact-icon-link" aria-label="Email" title="mustaome@andrew.cmu.edu">
+                        <svg fill="currentColor" viewBox="0 0 24 24" width="22" height="22">
+                            <path d="M20 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4l-8 5-8-5V6l8 5 8-5v2z"/>
+                        </svg>
+                    </a>
+                    <a href="https://www.linkedin.com/in/ustaomeroglu/" target="_blank" rel="noopener" class="contact-icon-link" aria-label="LinkedIn" title="LinkedIn">
+                        <svg fill="currentColor" viewBox="0 0 24 24" width="22" height="22">
+                            <path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433c-1.144 0-2.063-.926-2.063-2.065 0-1.138.92-2.063 2.063-2.063 1.14 0 2.064.925 2.064 2.063 0 1.139-.925 2.065-2.064 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/>
+                        </svg>
+                    </a>
+                    <a href="https://x.com/m_ustaomeroglu" target="_blank" rel="noopener" class="contact-icon-link" aria-label="X" title="X (@m_ustaomeroglu)">
+                        <svg fill="currentColor" viewBox="0 0 24 24" width="20" height="20">
+                            <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
+                        </svg>
+                    </a>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <p>&copy; 2025 Muhammed Ustaomeroglu</p>
+    </footer>
+
+    <!-- Link to external JavaScript file -->
+    <script src="js/script.js"></script>
+    <!-- AI assistant widget (hidden until configured; see assistant/README.md) -->
+    <script src="js/assistant.js" defer></script>
+</body>
+</html>
