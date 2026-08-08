@@ -171,8 +171,8 @@ strong { font-weight: 600; }
 
 .hero-grid {
     display: grid;
-    grid-template-columns: 1fr 280px;
-    gap: 56px;
+    grid-template-columns: 1fr 420px;
+    gap: 20px 56px;
     align-items: center;
 }
 
@@ -181,6 +181,7 @@ strong { font-weight: 600; }
 }
 
 .hero-name {
+    grid-column: 1 / -1;
     font-size: clamp(34px, 5.4vw, 58px);
     line-height: 1.05;
     margin: 0;
@@ -263,8 +264,9 @@ strong { font-weight: 600; }
 
 .profile-container {
     position: relative;
-    width: 260px;
-    height: 300px;
+    width: 420px;
+    height: 340px;
+    max-width: 100%;
 }
 
 .profile-photo {
@@ -448,8 +450,8 @@ h2 {
     .hero-actions { justify-content: center; }
 
     .profile-container {
-        width: 220px;
-        height: 250px;
+        width: 400px;
+        height: 323px;
     }
 }
 
@@ -499,8 +501,8 @@ h2 {
     body { font-size: 18px; }
 
     .profile-container {
-        width: 180px;
-        height: 205px;
+        width: 260px;
+        height: 210px;
     }
 
     .btn {

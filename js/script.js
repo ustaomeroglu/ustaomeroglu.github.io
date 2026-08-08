@@ -13,7 +13,7 @@ async function loadProfilePhoto() {
 
     try {
         // Use the actual profile picture from the images folder
-        profileImage.src = 'docs/images/pp.jpeg';
+        profileImage.src = 'docs/images/pp.JPG';
 
         profileImage.onload = function() {
             loadingPlaceholder.style.display = 'none';
