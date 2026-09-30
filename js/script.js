@@ -100,11 +100,59 @@ function initActiveNav() {
     sections.forEach(section => observer.observe(section));
 }
 
+// Click-to-play YouTube videos: the player (and YouTube's scripts) only load
+// once a visitor clicks; without JS the thumbnail simply links to YouTube
+function initVideoEmbeds() {
+    let warmed = false;
+
+    // Open connections to YouTube when a visitor hovers or touches a video,
+    // so the player starts sooner once they click
+    const warmConnections = () => {
+        if (warmed) return;
+        warmed = true;
+        ['https://www.youtube-nocookie.com', 'https://www.google.com', 'https://i.ytimg.com'].forEach(href => {
+            const link = document.createElement('link');
+            link.rel = 'preconnect';
+            link.href = href;
+            document.head.appendChild(link);
+        });
+    };
+
+    document.querySelectorAll('.video-facade[data-youtube]').forEach(facade => {
+        facade.addEventListener('pointerover', warmConnections, { once: true });
+        facade.addEventListener('focus', warmConnections, { once: true });
+
+        facade.addEventListener('click', (e) => {
+            e.preventDefault();
+            if (facade.classList.contains('is-loading')) return;
+            facade.classList.add('is-loading');
+            facade.querySelector('.video-play').textContent = 'Loading…';
+
+            const iframe = document.createElement('iframe');
+            iframe.src = `https://www.youtube-nocookie.com/embed/${facade.dataset.youtube}?autoplay=1&rel=0`;
+            iframe.title = facade.dataset.title;
+            iframe.allow = 'autoplay; encrypted-media; picture-in-picture; fullscreen';
+            iframe.allowFullscreen = true;
+            iframe.referrerPolicy = 'strict-origin-when-cross-origin';
+
+            // The iframe sits underneath the thumbnail until the player has
+            // loaded, instead of showing an empty black box in the meantime.
+            // YouTube's load event can fire long after playback starts, so
+            // cap the wait
+            const reveal = () => facade.remove();
+            iframe.addEventListener('load', reveal, { once: true });
+            setTimeout(reveal, 4000);
+            facade.before(iframe);
+        });
+    });
+}
+
 // Initialize once the DOM is ready
 window.addEventListener('DOMContentLoaded', () => {
     loadProfilePhoto();
     initScrollReveal();
     initActiveNav();
+    initVideoEmbeds();
 });
 
 // Close mobile menu when clicking outside

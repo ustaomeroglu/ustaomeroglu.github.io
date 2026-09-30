@@ -365,6 +365,11 @@ h2,
 .research-theme strong { color: var(--ink); }
 .research-theme em { color: var(--ink); font-style: italic; }
 
+/* Paper videos (click-to-play YouTube) */
+.paper-video {
+    margin: 26px 0 24px;
+}
+
 /* ---------- A Place I Love ---------- */
 .place-intro {
     font-size: 18px;
@@ -412,7 +417,8 @@ h2,
     object-fit: cover;
 }
 
-.place-figure figcaption {
+.place-figure figcaption,
+.paper-video figcaption {
     font-family: var(--sans);
     font-size: 13.5px;
     line-height: 1.5;
@@ -420,7 +426,8 @@ h2,
     margin-top: 10px;
 }
 
-.place-figure figcaption em {
+.place-figure figcaption em,
+.paper-video figcaption em {
     color: var(--ink-soft);
 }
 
@@ -428,7 +435,8 @@ h2,
     margin-top: 8px;
 }
 
-.place-video {
+.place-video,
+.video-embed {
     position: relative;
     aspect-ratio: 16 / 9;
     border-radius: 16px;
@@ -439,12 +447,80 @@ h2,
 }
 
 .place-video iframe,
-.place-video video {
+.place-video video,
+.video-embed iframe,
+.video-facade {
     position: absolute;
     inset: 0;
     width: 100%;
     height: 100%;
     border: 0;
+}
+
+/* Thumbnail shown until clicked; js/script.js swaps in the YouTube player */
+.video-facade {
+    display: block;
+}
+
+.video-facade img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    transition: transform 0.3s ease, filter 0.3s ease;
+}
+
+.video-facade:hover img {
+    transform: scale(1.02);
+    filter: brightness(0.88);
+}
+
+.video-facade:focus-visible {
+    outline: 3px solid var(--accent);
+    outline-offset: -3px;
+}
+
+.video-play {
+    position: absolute;
+    right: 16px;
+    bottom: 16px;
+    display: inline-flex;
+    align-items: center;
+    gap: 9px;
+    padding: 9px 16px 9px 13px;
+    font-family: var(--sans);
+    font-size: 14px;
+    font-weight: 600;
+    color: #fff;
+    background: rgba(29, 28, 26, 0.82);
+    border-radius: 999px;
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.3);
+    transition: background 0.15s ease, transform 0.15s ease;
+}
+
+/* Play triangle */
+.video-play::before {
+    content: "";
+    border-style: solid;
+    border-width: 7px 0 7px 11px;
+    border-color: transparent transparent transparent currentColor;
+}
+
+.video-facade:hover .video-play {
+    background: var(--accent);
+    transform: translateY(-1px);
+}
+
+.video-facade.is-loading {
+    cursor: progress;
+}
+
+.video-facade.is-loading .video-play {
+    background: var(--accent);
+}
+
+.video-facade.is-loading .video-play::before {
+    display: none;
 }
 
 /* ---------- Contact ---------- */
@@ -587,6 +663,13 @@ h2,
     .place-gallery {
         grid-template-columns: 1fr;
         gap: 22px;
+    }
+
+    .video-play {
+        right: 10px;
+        bottom: 10px;
+        padding: 7px 13px 7px 11px;
+        font-size: 13px;
     }
 }
 

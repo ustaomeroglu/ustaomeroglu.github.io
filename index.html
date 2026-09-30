@@ -78,7 +78,7 @@
     <link rel="icon" href="data:,">
 
     <!-- Link to external CSS file -->
-    <link rel="stylesheet" href="css/styles.css?v=2">
+    <link rel="stylesheet" href="css/styles.css?v=4">
 </head>
 <body>
     <!-- Navigation -->
@@ -150,6 +150,17 @@
                     <p>
                         One instantiation is <strong>Representational Effective Theory (RET)</strong>, where we learn these macro-variables representationally and entirely unsupervised, with no task labels. RET yields interpretable "mental state" trajectories, supports early prediction of behaviors such as sycophancy, and provides causal handles for steering. See the <a href="https://arxiv.org/abs/2605.09294" target="_blank" rel="noopener">paper</a> and <a href="https://ustaomeroglu.github.io/RET/" target="_blank" rel="noopener">project page</a>.
                     </p>
+                    <figure class="paper-video">
+                        <div class="video-embed">
+                            <a class="video-facade" href="https://www.youtube.com/watch?v=TPi7p32JVPU" target="_blank" rel="noopener"
+                               data-youtube="TPi7p32JVPU" data-title="Watch an AI Think: Reading, Predicting and Steering LLM Mental States"
+                               aria-label="Play video: Watch an AI Think: Reading, Predicting and Steering LLM Mental States (6 min)">
+                                <img src="docs/videos/web/ret.jpg" alt="" width="1280" height="720" loading="lazy" decoding="async">
+                                <span class="video-play" aria-hidden="true">Watch &middot; 6 min</span>
+                            </a>
+                        </div>
+                        <figcaption><em>Watch an AI Think: Reading, Predicting and Steering LLM Mental States</em></figcaption>
+                    </figure>
                     <p>
                         A closely related work learns the macro-variables we call the <strong>"plan"</strong>, studying how language models plan their outputs from an information-theoretic perspective: how far ahead they look (horizon), whether they keep alternatives open (branching), and how much they reuse earlier computation (history). See the <a href="https://arxiv.org/abs/2509.25260" target="_blank" rel="noopener">paper</a> (ICLR 2026).
                     </p>
@@ -161,8 +172,22 @@
                         A second, more applied line of my work aims at making LLMs safer. Here I study <em>emergent misalignment</em>, where fine-tuning on a narrow objective spills over into broadly harmful behavior. In <strong>BLOCK-EM</strong>, we trace this behavior to a small set of internal features and, during fine-tuning, block the model from strengthening them, cutting emergent misalignment by up to 95% with no loss in task performance. See the <a href="https://arxiv.org/abs/2602.00767" target="_blank" rel="noopener">paper</a> (ICML 2026).
                     </p>
                     <p>
-                        We also study why misalignment arises in the first place, framing both emergent misalignment and its subtler, <em>subliminal</em> form as a shared, data-mediated phenomenon, and showing how dataset structure, task difficulty, and model capability together decide whether it emerges. See the <a href="https://arxiv.org/abs/2605.12798" target="_blank" rel="noopener">paper</a> (under review).
+                        We also study why misalignment arises in the first place, framing both emergent misalignment and its subtler, <em>subliminal</em> form as a shared, data-mediated phenomenon, and showing how dataset structure, task difficulty, and model capability together decide whether it emerges. See the <a href="https://arxiv.org/abs/2605.12798" target="_blank" rel="noopener">paper</a> (NeurIPS 2026).
                     </p>
+                    <p>
+                        During my internship at NVIDIA, I worked on privacy: a language model fine-tuned on sensitive records can end up reproducing them. In <strong>TRAP</strong>, we measure this memorization per token by comparing the model with a reference trained on other records, and penalize the model only where it pulls ahead of that reference, which reduces memorization of sensitive information at little cost in task performance. See the <a href="https://arxiv.org/abs/2609.32293" target="_blank" rel="noopener">paper</a> (under review).
+                    </p>
+                    <figure class="paper-video">
+                        <div class="video-embed">
+                            <a class="video-facade" href="https://www.youtube.com/watch?v=ye7f10Q18eQ" target="_blank" rel="noopener"
+                               data-youtube="ye7f10Q18eQ" data-title="Your Model Remembers: How LLMs Memorize Private Data, and How to TRAP It"
+                               aria-label="Play video: Your Model Remembers: How LLMs Memorize Private Data, and How to TRAP It (4 min)">
+                                <img src="docs/videos/web/trap.jpg" alt="" width="1280" height="720" loading="lazy" decoding="async">
+                                <span class="video-play" aria-hidden="true">Watch &middot; 4 min</span>
+                            </a>
+                        </div>
+                        <figcaption><em>Your Model Remembers: How LLMs Memorize Private Data, and How to TRAP It</em></figcaption>
+                    </figure>
                 </div>
 
                 <div class="research-theme">
@@ -170,6 +195,17 @@
                     <p>
                         This third line is more mathematical, aimed first at a rigorous understanding of attention. Through an <em>interacting-entities</em> perspective, we show that self-attention can represent any interaction among entities and can learn it: gradient flow provably converges to such a solution, which generalizes both in-distribution and out-of-distribution (for instance, to longer sequences). The same perspective points to new mechanisms, HyperFeatureAttention for feature coupling and HyperAttention for higher-order interactions, validated in preliminary experiments. See the <a href="https://arxiv.org/abs/2506.06179" target="_blank" rel="noopener">paper</a> (ICML 2025).
                     </p>
+                    <figure class="paper-video">
+                        <div class="video-embed">
+                            <a class="video-facade" href="https://www.youtube.com/watch?v=DyIZg518ko0" target="_blank" rel="noopener"
+                               data-youtube="DyIZg518ko0" data-title="A Theoretical Study of (Hyper) Self-Attention through the Lens of Interactions"
+                               aria-label="Play talk: A Theoretical Study of (Hyper) Self-Attention through the Lens of Interactions (35 min)">
+                                <img src="docs/videos/web/hyper_attention.jpg" alt="" width="640" height="360" loading="lazy" decoding="async">
+                                <span class="video-play" aria-hidden="true">Watch the talk &middot; 35 min</span>
+                            </a>
+                        </div>
+                        <figcaption>Talk: <em>A Theoretical Study of (Hyper) Self-Attention through the Lens of Interactions</em></figcaption>
+                    </figure>
                     <p>
                         I am now developing these designs further, ablating Hyper-Feature Attention variants (mixed-order heads, optional hyper-value branches, skip-residual stabilization) and building a Chinchilla-style, compute-matched framework to chart their scaling laws against standard Transformers.
                     </p>
@@ -220,7 +256,7 @@
     </footer>
 
     <!-- Link to external JavaScript file -->
-    <script src="js/script.js?v=2"></script>
+    <script src="js/script.js?v=4"></script>
     <!-- AI assistant widget (hidden until configured; see assistant/README.md) -->
     <script src="js/assistant.js" defer></script>
 </body>
