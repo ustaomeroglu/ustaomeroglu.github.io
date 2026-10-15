@@ -162,12 +162,14 @@
     this.clamp();
   };
 
-  Renderer.prototype.fit = function () {
+  // full: show the whole map. Otherwise big maps open at a comfortable zoom (the turn start centres on the capital).
+  Renderer.prototype.fit = function (full) {
     const ws = this.worldSize();
     const whole = Math.min(this.view.w / ws.w, this.view.h / ws.h);
     this.minZ = whole * 0.85;
-    // narrow screens start closer in; the turn start then centres on the player's capital
-    const z = this.view.w < 600 ? Math.min(this.view.h / ws.h, whole * 2) : whole;
+    const comfy = 22 / this.S;
+    let z = this.view.w < 600 ? Math.min(this.view.h / ws.h, whole * 2) : whole;
+    if (!full) z = Math.max(z, Math.min(comfy, 3.2));
     this.cam.z = z;
     this.cam.x = (ws.w - this.view.w / z) / 2;
     this.cam.y = (ws.h - this.view.h / z) / 2;
@@ -359,6 +361,26 @@
     drawGold(g, x + S * 0.3, y - S * 0.12, S * 0.9);
   }
 
+  // a port: a wooden jetty reaching toward the water, a crane and a pennant in the house colour
+  function drawDock(g, x, y, S, color, water, center) {
+    g.save(); g.translate(x, y);
+    let ang = 0;
+    if (water != null) { const q = center(water); ang = Math.atan2(q.y - y, q.x - x); }
+    g.save(); g.rotate(ang);
+    g.fillStyle = 'rgba(0,0,0,0.25)'; g.fillRect(-S * 0.1, -S * 0.16, S * 0.95, S * 0.36);
+    g.fillStyle = '#8a5f34'; g.fillRect(-S * 0.12, -S * 0.2, S * 0.95, S * 0.34);
+    g.strokeStyle = PAL.ink; g.lineWidth = 1.2; g.strokeRect(-S * 0.12, -S * 0.2, S * 0.95, S * 0.34);
+    g.strokeStyle = 'rgba(30,20,10,0.55)'; g.lineWidth = 1;
+    for (let k = 1; k < 6; k++) { const xx = -S * 0.12 + (k * S * 0.95) / 6; g.beginPath(); g.moveTo(xx, -S * 0.2); g.lineTo(xx, S * 0.14); g.stroke(); }
+    for (const yy of [-S * 0.24, S * 0.18]) { g.beginPath(); g.arc(S * 0.75, yy, S * 0.05, 0, Math.PI * 2); g.fillStyle = '#5a3d22'; g.fill(); g.strokeStyle = PAL.ink; g.stroke(); }
+    g.restore();
+    // crane with a pennant
+    g.strokeStyle = PAL.ink; g.lineWidth = 2;
+    g.beginPath(); g.moveTo(-S * 0.18, S * 0.22); g.lineTo(-S * 0.18, -S * 0.5); g.lineTo(S * 0.12, -S * 0.42); g.stroke();
+    g.beginPath(); g.moveTo(S * 0.12, -S * 0.42); g.lineTo(S * 0.12, -S * 0.22); g.lineWidth = 1; g.stroke();
+    g.beginPath(); g.moveTo(-S * 0.18, -S * 0.5); g.lineTo(-S * 0.42, -S * 0.44); g.lineTo(-S * 0.18, -S * 0.36); g.closePath(); g.fillStyle = color; g.fill(); g.lineWidth = 1; g.stroke();
+    g.restore();
+  }
   function drawTower(g, x, y, S, color) {
     g.save(); g.translate(x, y + S * 0.12);
     const w = S * 0.36, h = S * 0.66;
@@ -673,7 +695,7 @@
       g.save();
       g.font = `600 ${S * 0.36}px "Alegreya Sans", "Gill Sans", sans-serif`; g.textAlign = 'center'; g.textBaseline = 'top';
       g.lineWidth = 3.5; g.strokeStyle = 'rgba(20,16,10,0.85)'; g.lineJoin = 'round';
-      const label = `${name} · +${value}`;
+      const label = `${CC.tr ? CC.tr(name) : name} · +${value}`;
       g.strokeText(label, x, y + S * 0.5); g.fillStyle = '#ffd77a'; g.fillText(label, x, y + S * 0.5);
       g.restore();
     }
@@ -694,7 +716,7 @@
       g.save();
       g.font = `600 ${S * 0.36}px "Alegreya Sans", "Gill Sans", sans-serif`; g.textAlign = 'center'; g.textBaseline = 'top';
       g.lineWidth = 3.5; g.strokeStyle = 'rgba(20,16,10,0.85)'; g.lineJoin = 'round';
-      const label = `${name} · +${value}`;
+      const label = `${CC.tr ? CC.tr(name) : name} · +${value}`;
       g.strokeText(label, x, y + S * 0.52); g.fillStyle = '#ffd77a'; g.fillText(label, x, y + S * 0.52);
       g.restore();
     }
@@ -830,7 +852,7 @@
     for (const reg of st._regions || []) {
       const p = this.center(reg.tile);
       g.save(); g.font = `italic 700 ${S * (cam.z < 0.6 ? 1.1 : 0.62)}px "IM Fell English SC", Georgia, serif`; g.textAlign = 'center'; g.textBaseline = 'middle';
-      g.lineWidth = 3; g.strokeStyle = 'rgba(40,28,12,0.55)'; g.strokeText(reg.name, p.x, p.y); g.fillStyle = 'rgba(250,236,200,0.9)'; g.fillText(reg.name, p.x, p.y);
+      g.lineWidth = 3; g.strokeStyle = 'rgba(40,28,12,0.55)'; const rn = CC.tr ? CC.tr(reg.name) : reg.name; g.strokeText(rn, p.x, p.y); g.fillStyle = 'rgba(250,236,200,0.9)'; g.fillText(rn, p.x, p.y);
       g.restore();
     }
     for (const post of st._posts || []) { const p = this.center(post.tile); (post.colony ? drawPort : drawMarket)(g, p.x, p.y, S, post.name, post.value, cam.z); }
@@ -861,6 +883,7 @@
       if (t.b === 'farm') drawFarm(g, p.x, p.y, S);
       else if (t.b === 'mine') drawMine(g, p.x, p.y, S);
       else if (t.b === 'tower') drawTower(g, p.x, p.y, S, CC.colorOf(st, t.owner));
+      else if (t.b === 'port') drawDock(g, p.x, p.y, S, CC.colorOf(st, t.owner), st._nb[i].find((j) => st.tiles[j].t === 'water'), this.center.bind(this));
     }
     for (const c of st.cities) {
       const p = this.center(c.tile);

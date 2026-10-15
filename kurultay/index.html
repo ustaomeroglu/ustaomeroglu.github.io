@@ -160,6 +160,8 @@ h1, h2, h3 { font-family: var(--display); font-weight: 400; margin: 0; text-wrap
 .tag { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.08em; border: 1px solid var(--rule); border-radius: 999px; padding: 2px 8px; color: var(--parch-dim); white-space: nowrap; }
 .tag.gilt { color: var(--gilt); border-color: var(--gilt); }
 .tag.ready { color: var(--moss); border-color: var(--moss); }
+.lang-seg { margin-left: auto; align-self: flex-start; }
+.lang-row { display: flex; justify-content: flex-end; margin-bottom: 8px; }
 .join-box { max-width: 420px; }
 .lob-link { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; }
 .lob-link input { flex: 1; min-width: 200px; background: var(--ink); border: 1px solid var(--rule); border-radius: var(--r); padding: 7px 9px; }
@@ -376,7 +378,7 @@ h1, h2, h3 { font-family: var(--display); font-weight: 400; margin: 0; text-wrap
     <aside id="side">
       <div class="sidetabs" id="sidetabs" role="tablist">
         <button type="button" role="tab" data-tab="turn" aria-selected="true">Turn</button>
-        <button type="button" role="tab" data-tab="realm" aria-selected="false">Realm</button>
+        <button type="button" role="tab" data-tab="realm" aria-selected="false">Diplomacy</button>
         <button type="button" role="tab" data-tab="chron" aria-selected="false">Chronicle</button>
       </div>
       <section class="card" id="panel"></section>
@@ -387,12 +389,13 @@ h1, h2, h3 { font-family: var(--display); font-weight: 400; margin: 0; text-wrap
 </div>
 <div id="layer"></div>
 
-<script src="engine.js?v=e5e65ed334"></script>
-<script src="ai.js?v=e5e65ed334"></script>
-<script src="audio.js?v=e5e65ed334"></script>
-<script src="render.js?v=e5e65ed334"></script>
-<script src="ui.js?v=e5e65ed334"></script>
-<script src="p2p.js?v=e5e65ed334"></script>
-<script src="net.js?v=e5e65ed334"></script>
+<script src="engine.js?v=205636e415"></script>
+<script src="i18n.js?v=205636e415"></script>
+<script src="ai.js?v=205636e415"></script>
+<script src="audio.js?v=205636e415"></script>
+<script src="render.js?v=205636e415"></script>
+<script src="ui.js?v=205636e415"></script>
+<script src="p2p.js?v=205636e415"></script>
+<script src="net.js?v=205636e415"></script>
 </body>
 </html>

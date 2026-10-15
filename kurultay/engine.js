@@ -87,7 +87,8 @@
     'Foxhollow', 'Glenhaven', 'Hawksmoor', 'Kettering', 'Lowmarsh', 'Merrowby', 'Rookhaven', 'Sablecross',
     'Tamsworth', 'Wardenfell', 'Amberley', 'Burnholt', 'Crowmere', 'Dovecote', 'Fennick', 'Gallowmere', 'Hartwell'];
 
-  const SIZES = { small: 0.75, normal: 1, large: 1.3 };
+  const SIZES = { small: 0.75, normal: 1, large: 1.3 };   // games saved before map scales were stored
+  const SIZE_SCALE = { small: 0.6, normal: 1, large: 1.6 }; // new games: clearly different sizes
 
   // ---------------------------------------------------------------- RNG
   function mulberry32(seed) {
@@ -197,7 +198,8 @@
 
   // ---------------------------------------------------------------- map generation
   function mapDims(np, size, gen, kind) {
-    const mul = SIZES[size] || 1;
+    // size: a name from SIZES (older games) or the scale factor itself
+    const mul = typeof size === 'number' ? size : SIZES[size] || 1;
     const land = (80 * np + 110) * mul;
     if (kind === 'world') {
       // the sketch is twice as wide as it is tall; hex rows are 0.866 high
@@ -788,7 +790,7 @@
   function baseState(map, settings) {
     const st = {
       v: 1, W: map.W, H: map.H, mapSeed: map.seed, settings,
-      tiles: [], rivers: map.rivers, cities: [], armies: [], fleets: [], players: [],
+      tiles: [], rivers: map.rivers, cities: [], armies: [], fleets: [], ports: {}, players: [],
       round: 1, maxRounds: settings.rounds || 0, cur: 0, rng: (map.seed ^ 0x5bd1e995) | 0,
       nextId: 1, log: [], logSeq: 0, over: null, turnNo: 0, nameIdx: 0,
       dip: { peace: {}, offers: [], tributes: [], trades: [], nextOffer: 1 },
@@ -816,8 +818,9 @@
     const np = cfg.players.length;
     const seed = cfg.seed != null ? cfg.seed >>> 0 : (Math.random() * 4294967296) >>> 0;
     const gen = cfg.gen || MAP_GEN, kind = cfg.map === 'world' ? 'world' : 'realm';
-    const map = generateMap(np, cfg.size || 'normal', seed, gen, kind);
-    const settings = { np, size: cfg.size || 'normal', rounds: cfg.rounds || 0, timer: cfg.timer || 0, tutorial: !!cfg.tutorial, gen, map: kind };
+    const size = cfg.size || 'normal', scale = cfg.scale || (cfg.tutorial ? SIZES[size] : SIZE_SCALE[size] || 1);
+    const map = generateMap(np, scale, seed, gen, kind);
+    const settings = { np, size, scale, rounds: cfg.rounds || 0, timer: cfg.timer || 0, tutorial: !!cfg.tutorial, gen, map: kind };
     const st = baseState(map, settings);
     cfg.players.forEach((p, i) => {
       st.players.push({
@@ -1227,6 +1230,7 @@
     t.owner = me;
     rep.captured.push(i);
     st.players[me].stats.taken++;
+    if (t.b === 'port' && st.ports && st.ports[i]) st.ports[i].train = [];
     if (t.b === 'tower') {
       t.b = null;
       (rep.burned = rep.burned || []).push(i);
@@ -1338,15 +1342,16 @@
   function income(st, p) {
     let cities = 0, farms = 0, mines = 0, upkeep = 0;
     for (const c of st.cities) if (c.owner === p) cities += (c.capital ? RULES.capitalIncome : RULES.cityIncome) + c.market * RULES.marketIncome;
-    let outposts = 0;
+    let outposts = 0, ports = 0;
     for (const t of st.tiles) if (t.owner === p) {
       if (t.b === 'farm') farms += RULES.farmIncome + (t.river ? RULES.riverFarmBonus : 0);
       else if (t.b === 'mine') mines += RULES.mineIncome;
       else if (t.b === 'tower') outposts++;
+      else if (t.b === 'port') ports++;
     }
     for (const a of st.armies) if (a.owner === p) UNITS.forEach((d, k) => { upkeep += (a.u[k] || 0) * d.upkeep; });
     const troops = Math.ceil(upkeep);
-    upkeep = troops + outposts * RULES.outpostUpkeep;
+    upkeep = troops + outposts * RULES.outpostUpkeep + ports * RULES.portUpkeep;
     let ships = 0;
     for (const f of st.fleets || []) if (f.owner === p) ships += f.n;
     const shipUpkeep = ships * RULES.shipUpkeep;
@@ -1354,7 +1359,7 @@
     const routes = tradeRoutes(st, p);
     const trade = routes.reduce((n, r) => n + (r.ok ? r.value : 0), 0);
     const gross = cities + farms + mines + trade;
-    return { cities, farms, mines, trade, routes, gross, upkeep, troops, outposts, outpostUpkeep: outposts * RULES.outpostUpkeep, ships, shipUpkeep, net: gross - upkeep };
+    return { cities, farms, mines, trade, routes, gross, upkeep, troops, outposts, outpostUpkeep: outposts * RULES.outpostUpkeep, ports, portUpkeep: ports * RULES.portUpkeep, ships, shipUpkeep, net: gross - upkeep };
   }
 
   function farmSlots(st, p) {
@@ -1365,7 +1370,7 @@
 
   function canBuild(st, p, i, kind) {
     const t = st.tiles[i], P = st.players[p];
-    const cost = kind === 'farm' ? RULES.farmCost : kind === 'mine' ? RULES.mineCost : kind === 'outpost' ? RULES.outpostCost : RULES.castleCost;
+    const cost = kind === 'farm' ? RULES.farmCost : kind === 'mine' ? RULES.mineCost : kind === 'outpost' ? RULES.outpostCost : kind === 'port' ? RULES.portCost : RULES.castleCost;
     const no = (reason) => ({ ok: false, reason, cost });
     if (st.cur !== p) return no('Wait for your turn.');
     if (t.owner !== p) return no('You must control this land.');
@@ -1386,6 +1391,9 @@
       const town = st.cities.find((c) => hexDist(st, c.tile, i) < RULES.outpostSpacing);
       if (town) return no(`${town.name} already guards this ground. Outposts must stand ${RULES.outpostSpacing}+ tiles from towns.`);
       for (let j = 0; j < st.tiles.length; j++) if (st.tiles[j].b === 'tower' && hexDist(st, i, j) < RULES.outpostSpacing) return no(`Too close to another outpost. Outposts must be ${RULES.outpostSpacing}+ tiles apart.`);
+    } else if (kind === 'port') {
+      if (t.gold) return no('Save gold deposits for a mine.');
+      if (!st._nb[i].some((j) => isWater(st, j))) return no('A port must stand on the coast, next to the water.');
     } else return no('Unknown building.');
     if (P.gold < cost) return no(`Needs ${cost} gold.`);
     return { ok: true, cost };
@@ -1399,6 +1407,7 @@
       const c = addCity(st, i, p, { walls: 0 });
       log(st, `${nameOf(st, p)} founded the castle of ${c.name}.`, 'build', [p]);
     } else st.tiles[i].b = kind === 'outpost' ? 'tower' : kind;
+    if (kind === 'port') { portOf(st, i); log(st, `${nameOf(st, p)} built a port at ${placeName(st, i)}.`, 'build', [p]); }
     return r;
   }
 
@@ -1497,6 +1506,21 @@
   function trainingOf(st, p) { let n = 0; for (const c of st.cities) if (c.owner === p) { const t = training(c); n += sum(t.u) + t.ships; } return n; }
   // at the start of the owner's turn, finished recruits step out ready to march
   function finishTraining(st, p) {
+    for (const k of Object.keys(st.ports || {})) {
+      const i = +k, d = st.ports[k];
+      if (st.tiles[i].b !== 'port') { delete st.ports[k]; continue; }
+      if (st.tiles[i].owner !== p) continue;
+      d.ships = 0;
+      const keep = [];
+      for (const e of d.train || []) {
+        e.left--;
+        if (e.left > 0) { keep.push(e); continue; }
+        const berth = shipBerth(st, i, p);
+        if (berth == null) { e.left = 0; keep.push(e); continue; }
+        if (e.ships) placeFleet(st, p, berth, e.ships, 0);
+      }
+      d.train = keep;
+    }
     for (const c of st.cities) {
       if (c.owner !== p || !c.train || !c.train.length) continue;
       const keep = [];
@@ -1546,7 +1570,7 @@
   }
 
   // ---------------------------------------------------------------- the sea: fleets, naval battles, bombardment
-  Object.assign(RULES, { riverShips: 3, trainTurns: 1, shipCost: 50, shipUpkeep: 2, shipAtt: 2, shipDef: 2, fleetMP: 9, shipsPerTurn: 2,
+  Object.assign(RULES, { portCost: 140, portUpkeep: 1, riverShips: 3, trainTurns: 1, shipCost: 50, shipUpkeep: 2, shipAtt: 2, shipDef: 2, fleetMP: 9, shipsPerTurn: 2,
     // armies aboard ships: board at an own harbor for gold, sail fast, but are nearly helpless against warships
     transportMP: 8, embarkBase: 5, embarkPer: 1, transportDef: 0.06, transportLoss: 0.6, bombardHit: 7, bombardWallHit: 9 });
   const fleetAt = (st, tile) => (st.fleets || []).find((f) => f.tile === tile) || null;
@@ -1656,8 +1680,55 @@
     return { p, A, D };
   }
   function harborWaterOf(st, p) {
-    for (const c of st.cities) if (c.owner === p && c.harbor) { const w = shipBerth(st, c.tile, p); if (w != null) return w; }
+    for (const h of harborSites(st, p)) { const w = shipBerth(st, h, p); if (w != null) return w; }
     return null;
+  }
+  // every place a house's ships call home: towns with a harbor, then ports
+  function harborSites(st, p) {
+    const out = st.cities.filter((c) => c.owner === p && c.harbor).map((c) => c.tile);
+    for (const k of Object.keys(st.ports || {})) { const i = +k; if (st.tiles[i].b === 'port' && st.tiles[i].owner === p) out.push(i); }
+    return out;
+  }
+  // ---- ports: a harbor on the coast without a town. Warships are built there and armies board there.
+  function portOf(st, i) {
+    if (st.tiles[i].b !== 'port') return null;
+    st.ports = st.ports || {};
+    return (st.ports[i] = st.ports[i] || { ships: 0, train: [] });
+  }
+  function canPortShips(st, p, i, n) {
+    const t = st.tiles[i], P = st.players[p], cost = RULES.shipCost * n;
+    const no = (reason) => ({ ok: false, reason, cost });
+    if (t.b !== 'port' || t.owner !== p) return no('Not your port.');
+    if (st.cur !== p) return no('Wait for your turn.');
+    const d = portOf(st, i);
+    if ((d.ships || 0) + n > RULES.shipsPerTurn) return no(`A port launches at most ${RULES.shipsPerTurn} warships a turn.`);
+    if (shipBerth(st, i, p) == null) return no('Enemy ships blockade this port.');
+    if (P.gold < cost) return no(`Needs ${cost} gold.`);
+    return { ok: true, cost };
+  }
+  function portShips(st, p, i, n) {
+    const r = canPortShips(st, p, i, n);
+    if (!r.ok) return r;
+    const d = portOf(st, i);
+    st.players[p].gold -= r.cost;
+    d.ships = (d.ships || 0) + n;
+    queueTraining(d).ships += n;
+    return Object.assign(r, { training: true });
+  }
+  function cancelPortShips(st, p, i, n) {
+    const d = portOf(st, i);
+    if (!d || st.tiles[i].owner !== p || st.cur !== p) return { ok: false, reason: 'Not your port.' };
+    let left = n == null ? Infinity : n, done = 0;
+    for (const e of d.train.slice().reverse()) {
+      const take = Math.min(e.ships || 0, left);
+      if (!take) continue;
+      e.ships -= take; left -= take; done += take;
+      if (e.left === RULES.trainTurns) d.ships = Math.max(0, (d.ships || 0) - take);
+    }
+    d.train = d.train.filter((e) => e.ships);
+    if (!done) return { ok: false, reason: 'No warships are being built here.' };
+    st.players[p].gold += done * RULES.shipCost;
+    return { ok: true, n: done, refund: done * RULES.shipCost };
   }
   // sail n ships of a fleet (all by default); the rest stay where they are as their own fleet
   function moveFleet(st, fleetId, dest, n) {
@@ -1796,7 +1867,8 @@
     if (a.owner !== st.cur) return no('It is not your turn.');
     if (a.sea) return no('This army is already at sea.');
     const c = cityAt(st, a.tile);
-    if (!c || c.owner !== a.owner || !c.harbor) return no('Armies board ships in one of your towns with a harbor.');
+    const port = st.tiles[a.tile].b === 'port' && st.tiles[a.tile].owner === a.owner;
+    if (!port && (!c || c.owner !== a.owner || !c.harbor)) return no('Armies board ships in one of your towns with a harbor, or at one of your ports.');
     if (!sum(u)) return no('Choose who boards.');
     if ((a.used || 0) >= SPENT) return no('This army lost a battle this turn.');
     if ((a.used || 0) + 1 >= RULES.transportMP || movesLeft(a, u) <= 0) return no('This army has no steps left this turn.');
@@ -1951,7 +2023,7 @@
     const out = [];
     if (p < 0 || !st.players[p] || !st.players[p].alive) return out;
     const harborWater = new Set();
-    for (const c of st.cities) if (c.owner === p && c.harbor) for (const j of st._nb[c.tile]) if (isWater(st, j)) harborWater.add(j);
+    for (const h of harborSites(st, p)) for (const j of st._nb[h]) if (isWater(st, j)) harborWater.add(j);
     for (const post of st._posts || []) {
       const f = fleetAt(st, post.tile);
       if (!f || f.owner !== p) continue;
@@ -2122,7 +2194,8 @@
     return {
       v: 1, mapSeed: st.mapSeed, settings: st.settings,
       own: st.tiles.map((t) => (t.owner < 0 ? '.' : String(t.owner))).join(''),
-      bld: st.tiles.map((t) => (t.b === 'farm' ? 'f' : t.b === 'mine' ? 'm' : t.b === 'city' ? 'c' : t.b === 'tower' ? 't' : '.')).join(''),
+      bld: st.tiles.map((t) => (t.b === 'farm' ? 'f' : t.b === 'mine' ? 'm' : t.b === 'city' ? 'c' : t.b === 'tower' ? 't' : t.b === 'port' ? 'p' : '.')).join(''),
+      ports: st.ports || {},
       cities: st.cities, armies: st.armies, fleets: st.fleets || [], players: st.players,
       round: st.round, maxRounds: st.maxRounds, cur: st.cur, rng: st.rng, nextId: st.nextId,
       log: st.log.slice(-120), logSeq: st.logSeq, over: st.over, turnNo: st.turnNo, nameIdx: st.nameIdx, dip: st.dip,
@@ -2131,16 +2204,16 @@
 
   function deserialize(o) {
     const s = o.settings;
-    const map = tryGenerate(s.np, s.size, o.mapSeed, s.gen || 1, s.map);
+    const map = tryGenerate(s.np, s.scale || s.size, o.mapSeed, s.gen || 1, s.map);
     if (!map || map.W * map.H !== o.own.length) throw new Error('Saved map could not be rebuilt');
     const st = baseState(map, s);
     for (let i = 0; i < st.tiles.length; i++) {
       const t = st.tiles[i], ch = o.own[i], b = o.bld[i];
       t.owner = ch === '.' ? -1 : +ch;
-      t.b = b === 'f' ? 'farm' : b === 'm' ? 'mine' : b === 'c' ? 'city' : b === 't' ? 'tower' : null;
+      t.b = b === 'f' ? 'farm' : b === 'm' ? 'mine' : b === 'c' ? 'city' : b === 't' ? 'tower' : b === 'p' ? 'port' : null;
     }
     const clone = (x) => JSON.parse(JSON.stringify(x));
-    st.cities = clone(o.cities); st.armies = clone(o.armies); st.players = clone(o.players); st.fleets = clone(o.fleets || []);
+    st.cities = clone(o.cities); st.armies = clone(o.armies); st.players = clone(o.players); st.fleets = clone(o.fleets || []); st.ports = clone(o.ports || {});
     for (const c of st.cities) st.tiles[c.tile].city = c.id;
     for (const a of st.armies) { if (a.used == null) a.used = a.moved ? SPENT : 0; if (a.took == null) a.took = 0; delete a.moved; a.u = normU(a.u); delete a.fresh; }
     Object.assign(st, { round: o.round, maxRounds: o.maxRounds, cur: o.cur, rng: o.rng, nextId: o.nextId, log: clone(o.log || []), logSeq: o.logSeq, over: o.over ? clone(o.over) : null, turnNo: o.turnNo, nameIdx: o.nameIdx, dip: o.dip ? clone(o.dip) : { peace: {}, offers: [], tributes: [], nextOffer: 1 } });
@@ -2151,7 +2224,7 @@
     UNITS, NU, Z, normU, TERRAIN, RULES, COLORS, REBEL, FLAG_W, FLAG_H, validFlag, flagPalette, flagOf, HOUSE_NAMES, SIZES, DICE,
     mulberry32, rand, hexDistW, hexDist, disk, mapDims, generateMap, tryGenerate,
     newGame, passable, fatigue, MAP_GEN, fleetAt, getFleet, canRecruitShips, recruitShips, fleetReach, fleetMovesLeft, planFleet, moveFleet, navalOdds,
-    bombardTargets, bombard, sailable, transportOdds, seaArmyAt, vesselAt, embarkCost, canEmbark, embark, seaReach, planSail, sailArmy, landingSpots, isWater, tradeRoutes, hasTrade, atWar, atPeace, peaceUntil, checkOffer, proposeOffer, answerOffer, describeOffer, relations, armyAt, getArmy, cityAt, isCoastal, colorOf, nameOf, armyStats, placeName, sum,
+    bombardTargets, bombard, sailable, harborSites, portOf, canPortShips, portShips, cancelPortShips, transportOdds, seaArmyAt, vesselAt, embarkCost, canEmbark, embark, seaReach, planSail, sailArmy, landingSpots, isWater, tradeRoutes, hasTrade, atWar, atPeace, peaceUntil, checkOffer, proposeOffer, answerOffer, describeOffer, relations, armyAt, getArmy, cityAt, isCoastal, colorOf, nameOf, armyStats, placeName, sum,
     stepCost, isHarborTile, dijkstra, reach, movesLeft, landLeft, movable, marchLeft, training, trainingOf, cancelTraining, zocSources, zocFor, zocTiles, inZoc, SPENT, defenderAt, battleCtx, powers, odds, lossFracs, luck,
     planCampaign, executeCampaign, income, farmSlots, canBuild, build, upgradeInfo, upgrade,
     recruitCap, canRecruit, recruit, ordersPerTurn, startTurn, endTurn, summary, serialize, deserialize, log,

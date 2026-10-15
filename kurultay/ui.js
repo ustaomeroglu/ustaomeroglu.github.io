@@ -217,6 +217,7 @@
         <tr class="neg"><td>Troops: ${CC.sum(u)} soldiers</td><td>−${inc.troops}</td></tr>
         ${inc.ships ? `<tr class="neg"><td>Warships: ${inc.ships} × ${RULES.shipUpkeep}</td><td>−${inc.shipUpkeep}</td></tr>` : ''}
         ${inc.outposts ? `<tr class="neg"><td>Outposts: ${inc.outposts} × ${RULES.outpostUpkeep}</td><td>−${inc.outpostUpkeep}</td></tr>` : ''}
+        ${inc.ports ? `<tr class="neg"><td>Ports: ${inc.ports} × ${RULES.portUpkeep}</td><td>−${inc.portUpkeep}</td></tr>` : ''}
         <tr class="sum"><td>Next turn</td><td>${signed(inc.net)}</td></tr></table>`;
     },
     orders() {
@@ -307,7 +308,8 @@
     const err = r.region.length ? r.errors.filter((e) => !/^Paint/.test(e))[0] : null;
     const town = CC.cityAt(s, a.tile);
     let board = '';
-    if (town && town.owner === s.cur && CC.isCoastal(s, town.tile)) {
+    const atPort = s.tiles[a.tile].b === 'port' && s.tiles[a.tile].owner === s.cur;
+    if ((town && town.owner === s.cur && CC.isCoastal(s, town.tile)) || atPort) {
       const e = CC.canEmbark(s, a.id, pl.u);
       board = `<button class="btn" type="button" data-act="embark" ${gate(e.ok, e.reason, `Put ${CC.sum(pl.u)} soldier${CC.sum(pl.u) === 1 ? '' : 's'} aboard ships for ${CC.embarkCost(pl.u)} gold. At sea they sail ${RULES.transportMP} tiles a turn, but warships can sink them.`)}>Board ships · ${CC.embarkCost(pl.u)}g</button>`;
     }
@@ -426,10 +428,26 @@
     if (t.b === 'farm') bits.push(`farm +${RULES.farmIncome + (t.river ? RULES.riverFarmBonus : 0)}`);
     if (t.b === 'mine') bits.push(`mine +${RULES.mineIncome}`);
     if (t.b === 'tower') bits.push('outpost');
+    if (t.b === 'port') bits.push('port');
     if (T.passable) html += `<div class="chips">${chip('Defense', `×${(T.def * (t.b === 'tower' ? RULES.outpostDef : t.b === 'farm' || t.b === 'mine' ? RULES.structureDef : 1)).toFixed(2)}`)}${chip('Step cost', T.cost + (t.river ? 1 : 0), tip('Outside your land. Your own land always costs 1.'))}</div>`;
     if (bits.length) html += `<p class="sub small">${bits.join(' · ')}</p>`;
     if (a && a.owner === s.cur && myTurn() && canMove(a)) html += `<div class="actions"><button class="btn" type="button" data-act="sel-army" data-id="${a.id}">Command this army</button></div>`;
-    html += buildSection(i);
+    html += buildSection(i) + portSection(i);
+    return html;
+  }
+
+  // a port of yours: build warships, see what is on the slipway
+  function portSection(i) {
+    const s = App.st, t = s.tiles[i];
+    if (t.b !== 'port' || t.owner !== s.cur) return '';
+    const d = CC.portOf(s, i), tr = CC.training(d), own = myTurn();
+    let html = '<h3>Port</h3><p class="hint-text">Warships are built here, armies standing here can board ships, and sea trade can come home here.</p>';
+    if (tr.ships) html += `<div class="buy-list"><div class="buy"><div class="nm">${tr.ships} warship${tr.ships === 1 ? '' : 's'} on the slipway · ready next turn</div>${own ? `<div class="btns"><button class="btn small" type="button" data-act="unpship" data-tile="${i}" ${tip(`Cancel one and get ${RULES.shipCost} gold back`)}>−1</button></div>` : ''}</div></div>`;
+    if (own) {
+      const w = CC.canPortShips(s, s.cur, i, 1);
+      html += `<div class="buy-list"><div class="buy"><div class="nm" ${tip(`Warships fight at sea, hold trading posts, block routes and bombard the shore. Attack ${RULES.shipAtt} · defense ${RULES.shipDef} · upkeep ${RULES.shipUpkeep}.`)}>Warship <span class="cost">${RULES.shipCost}g</span></div>
+        <div class="btns"><button class="btn small" type="button" data-act="pships" data-tile="${i}" ${gate(w.ok, w.reason, `Build a warship for ${w.cost} gold, at sea next turn`)}>+1</button></div></div></div>`;
+    }
     return html;
   }
 
@@ -443,11 +461,13 @@
       ['mine', 'Gold mine', `+${RULES.mineIncome} gold a turn.`],
       ['outpost', 'Outpost', `Enemies on the 6 tiles around it may only attack it or turn back. ${RULES.outpostMilitia} militia, soldiers here fight ×${RULES.outpostDef}. Upkeep ${RULES.outpostUpkeep}.`],
       ['castle', 'Castle', `A new town: +${RULES.cityIncome} gold a turn, recruits, walls, +1 marching order.`],
+      ['port', 'Port', `A harbor on the coast without a town: build warships here, board armies onto ships here, and bring sea trade home. Upkeep ${RULES.portUpkeep}.`],
     ];
     let html = '<h3>Build here</h3><div class="buy-list">';
     for (const [kind, name, desc] of opts) {
       if (kind === 'mine' && !t.gold) continue;
       if (kind === 'farm' && t.gold) continue;
+      if (kind === 'port' && !s._nb[i].some((j) => s.tiles[j].t === 'water')) continue;
       const r = CC.canBuild(s, s.cur, i, kind);
       html += `<div class="buy"><div class="nm" ${tip(desc)}>${name} <span class="cost">${r.cost}g</span></div>
         <button class="btn small" type="button" data-act="build" data-kind="${kind}" data-tile="${i}" ${gate(r.ok, r.reason, `${desc} ${r.cost} gold.`)}>Build</button></div>`;
@@ -502,6 +522,11 @@
       const k = b.dataset.k === 'ships' ? 'ships' : +b.dataset.k;
       const r = CC.cancelTraining(s, s.cur, App.sel.id, k, b.dataset.n ? +b.dataset.n : null);
       if (!r.ok) { sfx('deny'); hint(r.reason); } else { sfx('coins', { n: Math.min(6, 1 + Math.round(r.refund / 15)) }); commit(); hint(`Cancelled: ${r.refund} gold back in the treasury.`); }
+    } else if (act === 'pships' || act === 'unpship') {
+      const tile = +b.dataset.tile;
+      const r = act === 'pships' ? CC.portShips(s, s.cur, tile, 1) : CC.cancelPortShips(s, s.cur, tile, 1);
+      if (!r.ok) { sfx('deny'); hint(r.reason); }
+      else { sfx(act === 'pships' ? 'waves' : 'coins'); commit(); hint(act === 'pships' ? 'The shipwrights are at work: the warship puts to sea at the start of your next turn.' : `Cancelled: ${r.refund} gold back.`); }
     } else if (act === 'ships') {
       const r = CC.recruitShips(s, s.cur, App.sel.id, +b.dataset.n);
       if (!r.ok) { sfx('deny'); hint(r.reason); } else { sfx('waves'); App.R.pulse(s.cities[App.sel.id].tile, CC.colorOf(s, s.cur)); commit(); hint('The shipwrights are at work: the warship puts to sea at the start of your next turn.'); }
@@ -773,7 +798,7 @@
 
     $('#z-in').addEventListener('click', () => { R.zoomAt(R.view.w / 2, R.view.h / 2, 1.3); drawMap(); });
     $('#z-out').addEventListener('click', () => { R.zoomAt(R.view.w / 2, R.view.h / 2, 1 / 1.3); drawMap(); });
-    $('#z-fit').addEventListener('click', () => { R.fit(); drawMap(); });
+    $('#z-fit').addEventListener('click', () => { R.fit(true); drawMap(); });
   }
 
   function clickAt(x, y, button, shift) {
@@ -935,6 +960,7 @@
       if (t.b === 'farm') html += `<br>Farm · +${RULES.farmIncome + (t.river ? RULES.riverFarmBonus : 0)} gold`;
       if (t.b === 'mine') html += `<br>Gold mine · +${RULES.mineIncome} gold`;
       if (t.b === 'tower') html += `<br>Outpost · controls the 6 tiles around it`;
+      if (t.b === 'port') html += '<br>Port · warships are built here and armies board ships here';
       if (a) html += `<br>${CC.sum(a.u)} soldiers${a.sea ? ' aboard ships' : ''}: ${compText(a.u)}`;
       const f = CC.fleetAt(s, i);
       if (f) html += `<br>${f.n} warship${f.n === 1 ? '' : 's'} of ${esc(CC.nameOf(s, f.owner))}`;
@@ -1052,7 +1078,7 @@
         <tr><td>Buildings</td><td>${built.join(', ') || 'none'}</td></tr><tr><td>Militia</td><td>${1 + c.walls}</td></tr>
         ${c.owner >= 0 ? `<tr><td>Income</td><td>+${(c.capital ? RULES.capitalIncome : RULES.cityIncome) + c.market * RULES.marketIncome}</td></tr>` : ''}
         <tr class="sum"><td>Defense strength</td><td>${D.toFixed(1)}</td></tr></table>`;
-    } else html += `<h3>${T.name}${t.river ? ' · river' : ''}</h3><p class="muted">${t.owner >= 0 ? who(t.owner) : T.passable ? 'Unclaimed' : t.t === 'water' ? 'Water' : t.t === 'colony' ? 'Colonial land, reached only by ship' : 'Impassable'}${t.gold ? ' · gold deposit' : ''}${t.b === 'farm' ? ' · farm' : t.b === 'mine' ? ' · gold mine' : t.b === 'tower' ? ' · outpost' : ''}</p>`;
+    } else html += `<h3>${T.name}${t.river ? ' · river' : ''}</h3><p class="muted">${t.owner >= 0 ? who(t.owner) : T.passable ? 'Unclaimed' : t.t === 'water' ? 'Water' : t.t === 'colony' ? 'Colonial land, reached only by ship' : 'Impassable'}${t.gold ? ' · gold deposit' : ''}${t.b === 'farm' ? ' · farm' : t.b === 'mine' ? ' · gold mine' : t.b === 'tower' ? ' · outpost' : t.b === 'port' ? ' · port' : ''}</p>`;
     if (a) {
       html += `<h4>${c ? 'Garrison' : a.sea ? 'Aboard ships: army' : 'Army'} of ${who(a.owner)} · ${CC.sum(a.u)}</h4><table class="tiptab">${UN.map((d, k) => (a.u[k] ? `<tr><td>${d.name}</td><td>${a.u[k]}</td></tr>` : '')).join('')}
         ${a.owner === s.cur ? `<tr><td>${a.sea ? 'Sea moves left' : 'Steps left'}</td><td>${CC.movesLeft(a)}</td></tr>` : ''}</table>`;
@@ -1225,6 +1251,7 @@
   }
 
   function showRules() {
+    if (CC.I18N && CC.I18N.lang === 'tr' && CC.I18N.rules) { modal(CC.I18N.rules(RULES, UN), { wide: true }); return; }
     modal(`<h2>How to play</h2><p class="lead">Grow from one castle into a realm. The game ends after the last round, or when a single house remains.</p>
       <div class="rules">
         <section><h3>Your turn</h3><ul><li>Collect gold from <b>towns, farms and mines</b>, minus army upkeep.</li><li>Recruit and build in any order.</li><li>Give each army one march. Press <b>End turn</b> when done.</li></ul></section>
@@ -1233,8 +1260,8 @@
         <section><h3>Units</h3><ul>${UN.map((d) => `<li><b>${d.name}</b> ${d.cost}g · att ${d.att} · def ${d.def}. ${esc(d.desc)}</li>`).join('')}<li>Upkeep each turn: ${UN.map((d) => `${d.name.toLowerCase()} ${d.upkeep}`).join(', ')}.</li></ul></section>
         <section><h3>Sea and trade</h3><ul><li>A town with a <b>Harbor</b> launches <b>warships</b> (${RULES.shipCost}g, ${RULES.shipUpkeep} a turn). Click a fleet, then a sea tile to sail up to ${RULES.fleetMP} tiles, faster than anything on land; fleets of up to ${RULES.riverShips} ships can also sail up rivers. Choose how many ships sail in the fleet's panel to split it; sail onto your own ships to join them again. Sail onto an enemy fleet to fight, or onto enemy soldiers at sea to sink them.</li><li>Once a turn a fleet can <b>bombard</b> an enemy army on the shore next to it: each ship kills a soldier on ${RULES.bombardHit}+ with 2d6 (${RULES.bombardWallHit}+ behind walls), and they cannot shoot back.</li><li><b>Trading posts</b> sit far out at sea (on the Known World, one off each colonial land). Keep a warship on one to earn its gold every turn. The faint dotted <b>sea lanes</b> are the trade routes: the gold sails home along them, then to your nearest harbor, and the route lights up in your colour.</li><li>An enemy warship anywhere on a route cuts the whole income, as does an enemy army on a caravan road. Peace partners never block.</li><li><b>Trade agreements</b> (in Deal, needs peace) pay both houses every turn along a caravan or sea route between your towns. Every market level you own adds +${RULES.marketTrade} gold to each of your agreements (up to +${RULES.marketTradeMax} each).</li></ul></section>
         <section><h3>Land and economy</h3><ul><li>One <b>farm</b> per ${RULES.tilesPerFarm} tiles you hold, on plains or rivers: +${RULES.farmIncome} gold (+${RULES.riverFarmBonus} by a river).</li><li><b>Mines</b> on gold deposits: +${RULES.mineIncome} gold.</li><li>Captured farms and mines change hands. Post soldiers on them to defend them (×${RULES.structureDef} palisade).</li></ul></section>
-        <section><h3>Towns, walls and ships</h3><ul><li>Towns give gold, recruits and orders. Your capital gives ${RULES.capitalIncome}, other towns ${RULES.cityIncome}.</li><li><b>Walls</b> multiply defense up to ×${RULES.walls.mult[3]}. A captured town loses one wall level.</li><li>In a town with a <b>harbor</b>, armies can <b>board ships</b> (${RULES.embarkBase}g + ${RULES.embarkPer}g a soldier). Afloat they sail ${RULES.transportMP} tiles a turn and land on any open shore, which ends their turn. They cannot fight at sea: warships that catch them drown most of them.</li><li>Found new <b>castles</b> for ${RULES.castleCost} gold on your land, ${RULES.castleMinDist}+ tiles from any town.</li><li><b>Outposts</b> (${RULES.outpostCost} gold, ${RULES.outpostUpkeep} a turn) control the 6 tiles around them. ${RULES.outpostMilitia} militia defend them, soldiers posted there fight ×${RULES.outpostDef}, and a captured outpost is burned.</li><li>A house that loses every town is out.</li></ul></section>
-        <section><h3>Diplomacy</h3><ul><li>Press <b>Deal</b> next to a house in the Realm list to offer gold now, gold every turn for ${RULES.tributeTurns} turns (tribute), and peace.</li><li><b>Peace</b> lasts ${RULES.peaceRounds} rounds and cannot be broken: neither side may march into the other's land, and their zones stop hindering each other.</li><li>Computer houses answer at once; people answer at the start of their turn. Unanswered offers lapse after a round.</li></ul></section>
+        <section><h3>Towns, walls and ships</h3><ul><li>Towns give gold, recruits and orders. Your capital gives ${RULES.capitalIncome}, other towns ${RULES.cityIncome}.</li><li><b>Walls</b> multiply defense up to ×${RULES.walls.mult[3]}. A captured town loses one wall level.</li><li>In a town with a <b>harbor</b>, armies can <b>board ships</b> (${RULES.embarkBase}g + ${RULES.embarkPer}g a soldier). Afloat they sail ${RULES.transportMP} tiles a turn and land on any open shore, which ends their turn. They cannot fight at sea: warships that catch them drown most of them.</li><li>Build a <b>port</b> (${RULES.portCost} gold, ${RULES.portUpkeep} a turn) on any coastal tile you hold: warships are built there and armies board there, without needing a coastal town.</li><li>Found new <b>castles</b> for ${RULES.castleCost} gold on your land, ${RULES.castleMinDist}+ tiles from any town.</li><li><b>Outposts</b> (${RULES.outpostCost} gold, ${RULES.outpostUpkeep} a turn) control the 6 tiles around them. ${RULES.outpostMilitia} militia defend them, soldiers posted there fight ×${RULES.outpostDef}, and a captured outpost is burned.</li><li>A house that loses every town is out.</li></ul></section>
+        <section><h3>Diplomacy</h3><ul><li>Press <b>Deal</b> next to a house in the Diplomacy tab to offer gold now, gold every turn for ${RULES.tributeTurns} turns (tribute), and peace.</li><li><b>Peace</b> lasts ${RULES.peaceRounds} rounds and cannot be broken: neither side may march into the other's land, and their zones stop hindering each other.</li><li>Computer houses answer at once; people answer at the start of their turn. Unanswered offers lapse after a round.</li></ul></section>
         <section><h3>Controls</h3><ul><li>Drag: paint, or pan when nothing is selected. Right-drag erases. Shift-click sets where the army stops. Right-click inspects.</li><li>With an army selected, clicking another of your armies selects that one instead; to join them, paint the path onto it.</li><li>Touch screens: long-press to inspect.</li><li>Scroll or two fingers to pan. Pinch, ctrl+scroll or the +/− buttons to zoom.</li><li><b>N</b> next army · <b>Enter</b> march · <b>Esc</b> clear · <b>E</b> end turn</li></ul></section>
       </div><div class="modal-actions"><button class="btn primary" type="button" data-close>Back to the map</button></div>`, { wide: true });
   }
@@ -1243,6 +1270,7 @@
     const s = App.st;
     const speeds = [['slow', 'Slow'], ['normal', 'Normal'], ['fast', 'Fast'], ['instant', 'Instant']];
     const m = modal(`<h2>Menu</h2>
+      ${CC.I18N ? `<div class="field" style="margin-top:14px"><label>Language</label>${CC.I18N.switcher()}</div>` : ''}
       <div class="field" style="margin-top:14px"><label>Computer turn speed</label><div class="seg" id="speed-seg">${speeds.map(([k, l]) => `<button type="button" data-speed="${k}" aria-pressed="${App.prefs.aiSpeed === k}">${l}</button>`).join('')}</div></div>
       <div class="field"><label for="vol">Sound volume</label><input type="range" id="vol" min="0" max="1" step="0.05" value="${Sfx.vol}"></div>
       ${App.online ? App.online.menuExtra() : '<p class="lead">This game saves itself in this browser after every action.</p>'}
@@ -1424,7 +1452,7 @@
       box.innerHTML = `
         <div class="setup-hero">
           <svg width="64" height="72" viewBox="0 0 30 34" aria-hidden="true"><path d="M3 2h24v14c0 8-6 13-12 16C9 29 3 24 3 16z" fill="#d7a646" stroke="#2a1e08" stroke-width="1.2"/><path d="M15 6v22M7 12h16" stroke="#2a1e08" stroke-width="2"/></svg>
-          <div><h1 id="setup-title">Kurultay</h1><p>Paint the borders you want, then fight for them. Turn-based conquest for 2 to 8 rulers around one screen, against the computer, or online.</p></div>
+          <div><h1 id="setup-title">Kurultay</h1><p>Paint the borders you want, then fight for them. Turn-based conquest for 2 to 8 rulers around one screen, against the computer, or online.</p></div>${CC.I18N ? CC.I18N.switcher() : ''}
         </div>
         <div class="setup-grid">
           <section>
@@ -1441,7 +1469,7 @@
           <section>
             <h3>The realm</h3>
             <div class="field"><label for="opt-map">Map</label><select id="opt-map">${[['realm', 'Random realm: a new land every game'], ['world', 'Known World: Europe and the Mediterranean']].map(([k, l]) => `<option value="${k}" ${cfg.map === k ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
-            <div class="field"><label for="opt-size">Map size</label><select id="opt-size">${[['small', 'Small: close quarters'], ['normal', 'Normal'], ['large', 'Large: room to grow']].map(([k, l]) => `<option value="${k}" ${cfg.size === k ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
+            <div class="field"><label for="opt-size">Map size</label><select id="opt-size">${[['small', 'Small: close quarters'], ['normal', 'Normal'], ['large', 'Large: a wide world to explore']].map(([k, l]) => `<option value="${k}" ${cfg.size === k ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
             <div class="field"><label for="opt-rounds">Length</label><select id="opt-rounds">${[[10, '10 rounds'], [15, '15 rounds'], [20, '20 rounds'], [30, '30 rounds'], [0, 'Until one house remains']].map(([k, l]) => `<option value="${k}" ${cfg.rounds === k ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
             <div class="field"><label for="opt-timer">Turn timer</label><select id="opt-timer">${[[0, 'Off'], [60, '60 seconds'], [90, '90 seconds'], [120, '2 minutes'], [180, '3 minutes']].map(([k, l]) => `<option value="${k}" ${cfg.timer === k ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
             <div class="field"><label for="opt-seed">Map seed (optional)</label><input id="opt-seed" inputmode="numeric" placeholder="Random" value="${esc(cfg.seed)}"></div>

@@ -98,7 +98,7 @@
     if (!code) return;
     App().closeAllModals();
     const prefs = load(PREF_KEY) || {};
-    const m = App().modal(`<div class="join-box"><h2>Join a game of Kurultay</h2>
+    const m = App().modal(`${CC.I18N ? `<div class="lang-row">${CC.I18N.switcher()}</div>` : ''}<div class="join-box"><h2>Join a game of Kurultay</h2>
         <p class="lead">Room <b style="letter-spacing:2px">${esc(code)}</b>. Choose the name of your house; you can change it in the lobby.</p>
         <div class="field"><label for="join-name">Your name</label><input id="join-name" type="text" maxlength="24" autocomplete="nickname" value="${esc(prefs.onlineName || '')}" placeholder="House …"></div>
         <p class="err" id="join-err" hidden></p></div>
