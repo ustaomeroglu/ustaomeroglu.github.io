@@ -383,6 +383,10 @@
       let s = g.seats.find((x) => x.uid === m.cid);
       if (!s && !g.started) {
         s = g.seats.find((x) => !x.ai && !x.uid);
+        // no open seat: the friend takes over the first computer house, or a new house if there is room
+        if (!s) s = g.seats.find((x) => x.ai);
+        if (!s && g.seats.length < 8) { s = { name: CC.HOUSE_NAMES.find((n) => !g.seats.some((x) => x.name === n)) || `House ${g.seats.length + 1}`, color: nextColor(g, 0), flag: null }; g.seats.push(s); }
+        if (s) s.ai = false;
         if (s) {
           Object.assign(s, { uid: m.cid, ready: false });
           if (m.name) s.name = String(m.name).slice(0, 24);
