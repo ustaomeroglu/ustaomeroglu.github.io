@@ -1,12 +1,12 @@
-/* Kurultay — online play anywhere, browser to browser (PeerJS / WebRTC).
-   The host's browser keeps the game: friends connect to it with a room code, send their moves, and get the
-   new state back. No accounts and no server of our own; PeerJS's free broker only introduces the browsers. */
+/* Kurultay — online play from anywhere (across countries, phones on mobile data, any Wi-Fi).
+   The host's browser keeps the game: friends join with a room code, send their moves, and get the new state back.
+   Messages travel through a free public relay (an MQTT broker reached over a normal secure web connection),
+   so no accounts and no server of our own are needed. If one relay is down, the next one is used. */
 (function () {
   'use strict';
   const CC = window.CC;
   const App = () => CC.App;
   const esc = (s) => CC.App.esc(s);
-  const PREFIX = 'kurultay-';
   const PREF_KEY = 'banners-borders-prefs-v1', HOST_KEY = 'kurultay-hosted-v1', JOIN_KEY = 'kurultay-joined-v1';
   const P2P = { peer: null, role: null, code: null, game: null };
   CC.P2P = P2P;
@@ -29,29 +29,119 @@
     return s;
   }
   const colorHex = (i) => CC.COLORS[i % CC.COLORS.length].hex;
-  const joinLink = (code) => { const u = new URL(location.href); u.search = ''; u.hash = ''; u.searchParams.set('join', code); return u.toString(); };
+  const joinLink = (code) => { const u = new URL(location.href); u.search = ''; u.hash = ''; u.searchParams.set('join', code); if (P2P.broker != null) u.searchParams.set('r', P2P.broker); return u.toString(); };
 
-  // PeerJS is fetched only when someone hosts or joins
-  let peerLib = null;
-  function loadPeerJS() {
-    if (window.Peer) return Promise.resolve(window.Peer);
-    if (peerLib) return peerLib;
-    const urls = ['https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js', 'https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js'];
-    peerLib = urls.reduce((p, url) => p.catch(() => new Promise((ok, bad) => {
+  // ------------------------------------------------------------ the relay
+  const BROKERS = ['wss://broker.emqx.io:8084/mqtt', 'wss://broker.hivemq.com:8884/mqtt', 'wss://test.mosquitto.org:8081/mqtt'];
+  const topic = (code, ...rest) => ['kurultay/v2', code].concat(rest).join('/');
+  const dec = (p) => { try { return JSON.parse(typeof p === 'string' ? p : new TextDecoder().decode(p)); } catch (e) { return null; } };
+  // the MQTT library is fetched only when someone hosts or joins
+  let mqttLib = null;
+  function loadMqtt() {
+    if (window.mqtt) return Promise.resolve(window.mqtt);
+    if (mqttLib) return mqttLib;
+    const urls = ['https://cdn.jsdelivr.net/npm/mqtt@5.10.1/dist/mqtt.min.js', 'https://unpkg.com/mqtt@5.10.1/dist/mqtt.min.js'];
+    mqttLib = urls.reduce((p, url) => p.catch(() => new Promise((ok, bad) => {
       const s = document.createElement('script');
-      s.src = url; s.onload = () => (window.Peer ? ok(window.Peer) : bad(new Error('no Peer'))); s.onerror = bad;
+      s.src = url; s.onload = () => (window.mqtt ? ok(window.mqtt) : bad(new Error('no mqtt'))); s.onerror = bad;
       document.head.appendChild(s);
     })), Promise.reject(new Error('start')));
-    peerLib.catch(() => { peerLib = null; });
-    return peerLib;
+    mqttLib.catch(() => { mqttLib = null; });
+    return mqttLib;
   }
-  function openPeer(id) {
-    return loadPeerJS().then((Peer) => new Promise((ok, bad) => {
-      const peer = id ? new Peer(id, { debug: 0 }) : new Peer({ debug: 0 });
-      const t = setTimeout(() => bad(new Error('timeout')), 15000);
-      peer.on('open', () => { clearTimeout(t); ok(peer); });
-      peer.on('error', (e) => { clearTimeout(t); bad(e); });
+  function connectBroker(idx, will) {
+    return loadMqtt().then((m) => new Promise((ok, bad) => {
+      const c = m.connect(BROKERS[idx], { clientId: 'kt' + Math.random().toString(16).slice(2, 12), clean: true, keepalive: 20, reconnectPeriod: 2500, connectTimeout: 8000, will });
+      const t = setTimeout(() => { try { c.end(true); } catch (e) { /* gone */ } bad(new Error('timeout')); }, 9000);
+      c.once('connect', () => { clearTimeout(t); ok(c); });
     }));
+  }
+  const pub = (c, t, msg, retain) => { try { c.publish(t, JSON.stringify(msg), { qos: 1, retain: !!retain }); } catch (e) { /* resent on the next move */ } };
+  // a link to one other browser: send(), and 'open' / 'data' / 'close' events, like a direct connection
+  function link(sendFn) {
+    const h = {};
+    return { open: false, send: sendFn, on(ev, cb) { (h[ev] = h[ev] || []).push(cb); }, fire(ev, x) { (h[ev] || []).forEach((f) => f(x)); } };
+  }
+
+  // Host: open the room on the first relay that answers. Each friend shows up as a link.
+  async function openRoom(code, brokerIdx) {
+    const order = brokerIdx != null ? [brokerIdx].concat(BROKERS.map((_, i) => i).filter((i) => i !== brokerIdx)) : BROKERS.map((_, i) => i);
+    let client = null, used = -1;
+    for (const i of order) {
+      try { client = await connectBroker(i, { topic: topic(code, 'room'), payload: JSON.stringify({ open: false }), qos: 1, retain: true }); used = i; break; } catch (e) { /* next relay */ }
+    }
+    if (!client) throw new Error('relay');
+    const handlers = {}, links = new Map();
+    const announce = () => pub(client, topic(code, 'room'), { open: true, at: Date.now() }, true);
+    client.subscribe(topic(code, 'h'), { qos: 1 });
+    announce();
+    client.on('connect', announce); // after the relay drops and comes back
+    client.on('message', (tp, payload) => {
+      const m = dec(payload);
+      if (!m || !m.from) return;
+      let l = links.get(m.from);
+      if (m.data && m.data.t === 'bye') { if (l) { links.delete(m.from); l.open = false; l.fire('close'); } return; }
+      if (!l) {
+        const cid = m.from;
+        l = link((data) => pub(client, topic(code, 'g', cid), data));
+        l.open = true; l.cid = cid; links.set(cid, l);
+        if (handlers.connection) handlers.connection(l);
+      }
+      l.seen = Date.now();
+      if (m.data && m.data.t !== 'ping') l.fire('data', m.data);
+    });
+    // a friend who has gone quiet for a while has left
+    const sweep = setInterval(() => { for (const [cid, l] of links) if (Date.now() - l.seen > 50000) { links.delete(cid); l.open = false; l.fire('close'); } }, 10000);
+    return {
+      broker: used,
+      on(ev, cb) { handlers[ev] = cb; },
+      destroy() { clearInterval(sweep); pub(client, topic(code, 'room'), { open: false }, true); setTimeout(() => { try { client.end(true); } catch (e) { /* gone */ } }, 400); },
+    };
+  }
+
+  // Friend: find the room (on the relay the link names, or on any relay), then talk to its host.
+  async function openGuest(code, brokerIdx) {
+    const me = myId();
+    const will = { topic: topic(code, 'h'), payload: JSON.stringify({ from: me, data: { t: 'bye' } }), qos: 1, retain: false };
+    const roomOn = (c) => new Promise((ok) => {
+      const t = setTimeout(() => ok(false), 3500);
+      const f = (tp, p) => { if (tp === topic(code, 'room')) { const m = dec(p); if (m && m.open) { clearTimeout(t); c.removeListener('message', f); ok(true); } } };
+      c.on('message', f);
+      c.subscribe(topic(code, 'room'), { qos: 1 });
+    });
+    const order = brokerIdx != null ? [brokerIdx].concat(BROKERS.map((_, i) => i).filter((i) => i !== brokerIdx)) : BROKERS.map((_, i) => i);
+    let client = null;
+    for (const i of order) {
+      let c;
+      try { c = await connectBroker(i, will); } catch (e) { continue; }
+      if (await roomOn(c)) { client = c; break; }
+      if (!client) { try { c.end(true); } catch (e) { /* next */ } }
+    }
+    if (!client) client = await connectBroker(order[0], will); // no room found: the lobby says so
+    let cur = null, ping = 0;
+    client.subscribe([topic(code, 'all'), topic(code, 'g', me)], { qos: 1 });
+    client.on('message', (tp, p) => {
+      const m = dec(p);
+      if (!m || !cur) return;
+      if (tp === topic(code, 'room')) {
+        if (m.open && !cur.open) { cur.open = true; cur.fire('open'); }
+        else if (!m.open && cur.open) { cur.open = false; cur.fire('close'); }
+        return;
+      }
+      if (cur.open) cur.fire('data', m);
+    });
+    client.on('offline', () => { if (cur && cur.open) { cur.open = false; cur.fire('close'); } });
+    return {
+      connect() {
+        cur = link((data) => pub(client, topic(code, 'h'), { from: me, data }));
+        // the room marker is kept by the relay, so subscribing again tells us at once whether the host is there
+        client.unsubscribe(topic(code, 'room'), () => client.subscribe(topic(code, 'room'), { qos: 1 }));
+        clearInterval(ping);
+        ping = setInterval(() => { if (cur && cur.open) cur.send({ t: 'ping' }); }, 15000);
+        return cur;
+      },
+      destroy() { clearInterval(ping); pub(client, topic(code, 'h'), { from: me, data: { t: 'bye' } }); setTimeout(() => { try { client.end(true); } catch (e) { /* gone */ } }, 400); },
+    };
   }
   const send = (conn, msg) => { try { if (conn && conn.open) conn.send(msg); } catch (e) { /* the other side will resync */ } };
 
@@ -89,6 +179,8 @@
   // Opening an invite link skips the start screen: a small box in the middle asks for a name.
   P2P.boot = function () {
     if (window.claude && window.claude.use) return false;
+    const r = new URLSearchParams(location.search).get('r');
+    if (r != null && /^\d$/.test(r)) P2P.linkBroker = +r;
     const code = (new URLSearchParams(location.search).get('join') || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
     if (code.length !== 5) return false;
     askName(code);
@@ -244,7 +336,7 @@
   async function resumeHost() {
     const h = load(HOST_KEY);
     if (!h) return;
-    await openHost(h.code, { seats: h.seats, settings: h.settings, started: true, save: h.save, rev: h.rev || 1, hostUid: myId() });
+    await openHost(h.code, { seats: h.seats, settings: h.settings, started: true, save: h.save, rev: h.rev || 1, hostUid: myId(), broker: h.broker });
   }
   async function openHost(code, game) {
     leave();
@@ -252,9 +344,9 @@
     const g = P2P.game = Object.assign({ lobbyEl: null, watchers: [] }, game);
     if (!g.started) g.lobbyEl = lobbyModal('Opening a lobby');
     else App().hint('Reopening your game…');
-    try { P2P.peer = await openPeer(PREFIX + code); }
+    try { P2P.peer = await openRoom(code, g.broker); P2P.broker = g.broker = P2P.peer.broker; }
     catch (e) {
-      if (g.lobbyEl) g.lobbyEl.innerHTML = `<h2>Could not open the lobby</h2><p class="lead">${e && e.type === 'unavailable-id' ? 'That room is still open in another tab or browser. Close it, wait a few seconds, then try again.' : 'The connection service did not answer. Check your internet connection and try again.'}</p><div class="modal-actions"><button class="btn primary" type="button" data-lob="leave">Back</button></div>`;
+      if (g.lobbyEl) g.lobbyEl.innerHTML = `<h2>Could not open the lobby</h2><p class="lead">The connection service did not answer. Check your internet connection and try again.</p><div class="modal-actions"><button class="btn primary" type="button" data-lob="leave">Back</button></div>`;
       else App().hint('Could not reopen the room. Try again in a few seconds.');
       return;
     }
@@ -262,7 +354,6 @@
       conn.on('data', (m) => onHostData(conn, m));
       conn.on('close', () => onHostClose(conn));
     });
-    P2P.peer.on('disconnected', () => { try { P2P.peer.reconnect(); } catch (e) { /* retried on the next action */ } });
     if (g.started) { App().closeAllModals(); App().startLoaded(CC.deserialize(g.save), session); }
     else renderLobby();
   }
@@ -336,7 +427,7 @@
   function saveHosted() {
     const g = P2P.game;
     if (!g || P2P.role !== 'host' || !App().st) return;
-    store(HOST_KEY, { code: P2P.code, seats: g.seats.map(({ conn, online, ...s }) => s), settings: g.settings, save: CC.serialize(App().st), rev: g.rev, at: Date.now() });
+    store(HOST_KEY, { code: P2P.code, broker: g.broker, seats: g.seats.map(({ conn, online, ...s }) => s), settings: g.settings, save: CC.serialize(App().st), rev: g.rev, at: Date.now() });
   }
 
   // ------------------------------------------------------------ friend
@@ -346,14 +437,14 @@
     P2P.role = 'guest'; P2P.code = code;
     const g = P2P.game = { seats: [], settings: {}, rev: 0, started: false, lobbyEl: lobbyModal(`Joining ${code}`), conn: null, inGame: false, name };
     store(JOIN_KEY, { code, at: Date.now() });
-    try { P2P.peer = await openPeer(null); }
+    try { P2P.peer = await openGuest(code, P2P.linkBroker); }
     catch (e) { g.lobbyEl.innerHTML = '<h2>Could not connect</h2><p class="lead">The connection service did not answer. Check your internet connection and try again.</p><div class="modal-actions"><button class="btn primary" type="button" data-lob="leave">Back</button></div>'; return; }
     connectToHost();
   }
   function connectToHost() {
     const g = P2P.game;
     if (!g || P2P.role !== 'guest') return;
-    const conn = P2P.peer.connect(PREFIX + P2P.code, { reliable: true });
+    const conn = P2P.peer.connect();
     g.conn = conn;
     const giveUp = setTimeout(() => {
       if (conn.open || P2P.game !== g) return;
@@ -409,7 +500,7 @@
     if (g) clearTimeout(g.retryTimer);
     P2P.game = null;
     if (P2P.peer) { try { P2P.peer.destroy(); } catch (e) { /* gone */ } }
-    P2P.peer = null; P2P.role = null;
+    P2P.peer = null; P2P.role = null; P2P.broker = null;
     if (App().online === session) App().online = null;
   }
   const seatOf = (p) => { const g = P2P.game; return g && g.seats[p]; };

@@ -242,7 +242,7 @@
     // ---------------------------------------------------------------- online lobby
     ['Join a game of Kurultay', 'Bir Kurultay oyununa katıl'], ['Room', 'Oda'], ['Choose the name of your house; you can change it in the lobby.', 'Hanedanının adını seç; lobide değiştirebilirsin.'],
     ['Your name', 'Adın'], ['Start screen instead', 'Bunun yerine ana ekran'], ['Join the lobby', 'Lobiye katıl'], ['Type a name first.', 'Önce bir ad yaz.'],
-    ['Game lobby', 'Oyun lobisi'], ['Opening a lobby', 'Lobi açılıyor'], ['Joining {x}', '{x} oyununa katılınıyor'], ['Connecting…', 'Bağlanıyor…'],
+    ['Game lobby', 'Oyun lobisi'], ['Game lobby · ', 'Oyun lobisi · '], ['Opening a lobby', 'Lobi açılıyor'], ['Joining {x}', '{x} oyununa katılınıyor'], ['Connecting…', 'Bağlanıyor…'],
     ['Send this link to your friends. They type a name and appear here; start when everyone is ready.', 'Bu bağlantıyı arkadaşlarına gönder. Adlarını yazıp burada görünürler; herkes hazır olunca başlat.'],
     ['Copy link', 'Bağlantıyı kopyala'], ['Copied', 'Kopyalandı'], ['Host', 'Kurucu'], ['Ready ✓', 'Hazır ✓'], ['Not ready', 'Hazır değil'], ['Ready', 'Hazır'], ['Open seat', 'Boş yer'], ['Offline', 'Bağlı değil'], ['Computer', 'Bilgisayar'], ['Friend', 'Arkadaş'],
     ['Pick your colour and flag, then press <b>Ready</b>.', 'Rengini ve bayrağını seç, sonra <b>Hazır</b>’a bas.'], ['You are ready. Waiting for the host to start.', 'Hazırsın. Kurucunun başlatması bekleniyor.'],
@@ -364,7 +364,7 @@
   const escHtml = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const reEsc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const labels = new Map(), phrases = [];
-  const isLabel = (en) => !/[{<]/.test(en) && /^[A-Za-zÀ-ž'&;#0-9 ✓]+$/.test(en) && en.split(' ').length <= 3 && !/[.:!?]$/.test(en);
+  const isLabel = (en) => !/[{<]/.test(en) && /^[A-Za-z\u00C0-\u017E'&;#0-9 \u2713]+$/.test(en) && en.split(' ').length <= 3 && !/[.:!?]$/.test(en);
   function compile(en, tr) {
     if (isLabel(en)) { labels.set(en, tr); return; }
     for (const [e, t] of en.includes('&#39;') || !/['"&]/.test(en) ? [[en, tr]] : [[en, tr], [escHtml(en), escHtml(tr)]]) {
