@@ -1944,6 +1944,8 @@
     if (data && data.save) {
       try { startLoaded(CC.deserialize(data.save), null); return; } catch (e) { /* fall through to setup */ }
     }
+    // an invite link goes straight to the name prompt for the online lobby
+    if (CC.P2P && CC.P2P.boot && CC.P2P.boot()) return;
     showSetup();
   }
 

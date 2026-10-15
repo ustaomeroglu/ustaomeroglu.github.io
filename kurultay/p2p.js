@@ -55,25 +55,19 @@
   }
   const send = (conn, msg) => { try { if (conn && conn.open) conn.send(msg); } catch (e) { /* the other side will resync */ } };
 
-  // ------------------------------------------------------------ setup screen box
+  // ------------------------------------------------------------ start screen box
   P2P.renderSetup = function (el, cfg, startConfig) {
     P2P.setupEl = el; P2P.startConfig = startConfig;
-    const prefs = load(PREF_KEY) || {};
     const hosted = load(HOST_KEY), joined = load(JOIN_KEY);
-    const linkCode = (new URLSearchParams(location.search).get('join') || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
     el.innerHTML = `<h3>Play online with friends</h3>
-      <p class="estimate">No accounts needed. Set up the houses above: every <b>Human</b> house is a seat, and you sit in the first one. Host a game and send your friends the link; their browsers connect straight to yours, so keep this tab open while you play.</p>
+      <p class="estimate">No accounts needed. Host a game, set it up in the lobby and send your friends the link. Their browsers connect straight to yours, so keep your tab open while you play.</p>
       <div class="setup-foot" style="justify-content:flex-start;flex-wrap:wrap;gap:8px">
-        <button type="button" class="btn ${linkCode ? '' : 'primary'}" data-p2p="host">Host an online game</button>
+        <button type="button" class="btn primary" data-p2p="host">Host an online game</button>
         ${hosted && hosted.code && hosted.save ? `<button type="button" class="btn" data-p2p="resume">Resume hosting ${esc(hosted.code)}</button>` : ''}
-        ${joined && joined.code && joined.code !== linkCode ? `<button type="button" class="btn" data-p2p="rejoin">Rejoin ${esc(joined.code)}</button>` : ''}
+        ${joined && joined.code ? `<button type="button" class="btn" data-p2p="rejoin">Rejoin ${esc(joined.code)}</button>` : ''}
       </div>
-      <div class="field" style="margin-top:12px"><label for="p2p-code">Join a friend's game</label>
-        <div style="display:flex;gap:8px;flex-wrap:wrap"><input id="p2p-code" type="text" maxlength="5" placeholder="Room code" value="${esc(linkCode)}" style="width:120px;text-transform:uppercase">
-        <input id="p2p-name" type="text" maxlength="24" placeholder="Your house name" value="${esc(prefs.onlineName || '')}" style="flex:1;min-width:140px">
-        <button type="button" class="btn ${linkCode ? 'primary' : ''}" data-p2p="join">Join</button></div></div>`;
-    // arriving from an invite link: bring the join box into view, ready for a name
-    if (linkCode && !P2P.linkShown) { P2P.linkShown = true; setTimeout(() => { el.scrollIntoView({ block: 'center' }); const n = el.querySelector('#p2p-name'); if (n) n.focus(); }, 80); }
+      <div class="field" style="margin-top:12px"><label for="p2p-code">Have a room code?</label>
+        <div style="display:flex;gap:8px"><input id="p2p-code" type="text" maxlength="5" placeholder="ABCDE" style="width:120px;text-transform:uppercase"><button type="button" class="btn" data-p2p="code">Join</button></div></div>`;
     if (!el._p2p) {
       el._p2p = true;
       el.addEventListener('click', (e) => {
@@ -82,129 +76,256 @@
         const act = b.dataset.p2p;
         if (act === 'host') hostNew();
         else if (act === 'resume') resumeHost();
-        else if (act === 'rejoin') join((load(JOIN_KEY) || {}).code, (load(PREF_KEY) || {}).onlineName || '');
-        else if (act === 'join') {
+        else if (act === 'rejoin') askName((load(JOIN_KEY) || {}).code);
+        else if (act === 'code') {
           const code = (el.querySelector('#p2p-code').value || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
-          const name = (el.querySelector('#p2p-name').value || '').trim();
           if (code.length !== 5) { App().hint('Room codes have 5 letters and digits.'); return; }
-          if (name) store(PREF_KEY, Object.assign(load(PREF_KEY) || {}, { onlineName: name }));
-          join(code, name);
+          askName(code);
         }
       });
     }
   };
 
-  // a lobby window: the room code, the link, the seats
+  // Opening an invite link skips the start screen: a small box in the middle asks for a name.
+  P2P.boot = function () {
+    if (window.claude && window.claude.use) return false;
+    const code = (new URLSearchParams(location.search).get('join') || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+    if (code.length !== 5) return false;
+    askName(code);
+    return true;
+  };
+  function askName(code) {
+    if (!code) return;
+    App().closeAllModals();
+    const prefs = load(PREF_KEY) || {};
+    const m = App().modal(`<div class="join-box"><h2>Join a game of Kurultay</h2>
+        <p class="lead">Room <b style="letter-spacing:2px">${esc(code)}</b>. Choose the name of your house; you can change it in the lobby.</p>
+        <div class="field"><label for="join-name">Your name</label><input id="join-name" type="text" maxlength="24" autocomplete="nickname" value="${esc(prefs.onlineName || '')}" placeholder="House …"></div>
+        <p class="err" id="join-err" hidden></p></div>
+      <div class="modal-actions"><button class="btn ghost" type="button" data-close="back">Start screen instead</button><button class="btn primary" type="button" id="join-go">Join the lobby</button></div>`,
+    { dismiss: false, onClose: (v) => { if (v === 'back') { history.replaceState(null, '', location.pathname); App().showSetup(); } } });
+    const input = m.querySelector('#join-name'), go = m.querySelector('#join-go');
+    const submit = () => {
+      const name = input.value.trim();
+      if (!name) { const er = m.querySelector('#join-err'); er.hidden = false; er.textContent = 'Type a name first.'; input.focus(); return; }
+      store(PREF_KEY, Object.assign(load(PREF_KEY) || {}, { onlineName: name }));
+      join(code, name);
+    };
+    go.addEventListener('click', submit);
+    input.addEventListener('keydown', (e) => { if (e.key === 'Enter') submit(); });
+    setTimeout(() => input.focus(), 60);
+  }
+
+  // ------------------------------------------------------------ the lobby (host and friends see the same page)
+  const SIZES = [['small', 'Small'], ['normal', 'Normal'], ['large', 'Large']];
+  const MAPS = [['realm', 'Random realm'], ['world', 'Known World']];
+  const ROUNDS = [[10, '10 rounds'], [15, '15 rounds'], [20, '20 rounds'], [30, '30 rounds'], [0, 'Until one house remains']];
+  const TIMERS = [[0, 'Off'], [60, '60 seconds'], [90, '90 seconds'], [120, '2 minutes'], [180, '3 minutes']];
   function lobbyModal(title) {
+    App().closeAllModals();
     const ov = App().modal(`<div id="p2p-lobby"><h2>${esc(title)}</h2><p class="lead"><span class="spin"></span> Connecting…</p></div>`, { wide: true, dismiss: false });
     const el = ov.querySelector('#p2p-lobby');
     el.addEventListener('click', onLobbyClick);
+    el.addEventListener('change', onLobbyChange);
     return el;
   }
+  const waitingFor = (g) => g.seats.filter((s) => !s.ai && s.uid && s.uid !== g.hostUid && !s.ready);
   function renderLobby() {
     const g = P2P.game;
-    if (!g || !g.lobbyEl || g.started) return;
+    if (!g || !g.lobbyEl || g.started || !g.lobbyEl.isConnected) return;
     const host = P2P.role === 'host', me = myId();
+    // keep a half-typed name when the lobby redraws around it
+    const active = document.activeElement && g.lobbyEl.contains(document.activeElement) ? { id: document.activeElement.id, v: document.activeElement.value, s: document.activeElement.selectionStart } : null;
     const rows = g.seats.map((s, i) => {
-      const who = s.ai ? 'Computer' : s.uid === me ? (host ? 'You (host)' : 'You') : s.uid ? (s.online === false ? 'Joined (offline)' : 'Joined') : 'Open seat';
-      const mark = CC.validFlag(s.flag) && App().flagTag ? App().flagTag(s.flag, colorHex(s.color)) : App().swatch(colorHex(s.color));
-      return `<li><div>${mark} <b>${esc(s.name)}</b><div class="meta">${who}</div></div></li>`;
+      const mine = s.uid === me, isHost = s.uid === g.hostUid;
+      const mark = CC.validFlag(s.flag) && App().flagTag ? App().flagTag(s.flag, colorHex(s.color)) : '';
+      const status = s.ai ? '<span class="tag">Computer</span>' : isHost ? '<span class="tag gilt">Host</span>'
+        : s.uid ? (s.online === false ? '<span class="tag">Offline</span>' : s.ready ? '<span class="tag ready">Ready ✓</span>' : '<span class="tag">Not ready</span>') : '<span class="tag">Open seat</span>';
+      const colorBtn = (host || mine) ? `<button type="button" class="colorbtn" data-lob="color" data-i="${i}" style="background:${colorHex(s.color)}" aria-label="Change colour"></button>` : `<span class="colorbtn" style="background:${colorHex(s.color)}"></span>`;
+      const nameEl = mine ? `<input type="text" id="lob-name-${i}" data-lob="name" data-i="${i}" maxlength="24" value="${esc(s.name)}" aria-label="House name">` : `<b class="lob-name">${esc(s.name)}</b>`;
+      let ctl = '';
+      if (mine && !isHost) ctl = `<button type="button" class="btn small ${s.ready ? '' : 'primary'}" data-lob="ready">${s.ready ? 'Not ready' : 'Ready'}</button>`;
+      else if (host && !s.uid) ctl = `<div class="seg"><button type="button" data-lob="open" data-i="${i}" aria-pressed="${!s.ai}">Friend</button><button type="button" data-lob="cpu" data-i="${i}" aria-pressed="${s.ai}">CPU</button></div>`;
+      const flagBtn = mine ? `<button type="button" class="flagbtn" data-lob="flag" data-i="${i}" aria-label="Draw your flag">${mark || '<svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true"><path d="M4 18V2" stroke="currentColor" stroke-width="1.8"/><path d="M5 3h11l-3 3.5 3 3.5H5z" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>'}</button>` : `<span class="flagbtn">${mark}</span>`;
+      const x = host && !s.uid && g.seats.length > 2 ? `<button type="button" class="btn small ghost" data-lob="remove" data-i="${i}" aria-label="Remove this house">✕</button>` : '<span></span>';
+      return `<div class="lob-seat ${mine ? 'me' : ''}">${colorBtn}${flagBtn}<div class="lob-who">${nameEl}${status}</div>${ctl}${x}</div>`;
     }).join('');
-    const link = joinLink(P2P.code);
-    g.lobbyEl.innerHTML = `<h2>${host ? 'Your online game' : 'Joined'} · <span style="letter-spacing:2px">${esc(P2P.code)}</span></h2>
-      ${host ? `<p class="lead">Send your friends this link. They open it, type a name and press Join.</p>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><input readonly value="${esc(link)}" style="flex:1;min-width:200px" id="p2p-link"><button type="button" class="btn" data-lobby="copy">Copy link</button></div>` : '<p class="lead"><span class="spin"></span> Waiting for the host to start the game.</p>'}
-      <ul class="games" style="margin-top:12px">${rows}</ul>
-      ${host ? `<p class="estimate">Open seats still empty when you start are played by the computer.</p>` : ''}
-      <div class="modal-actions"><button type="button" class="btn" data-lobby="leave">${host ? 'Cancel' : 'Leave'}</button>${host ? '<button type="button" class="btn primary" data-lobby="start">Start game</button>' : ''}</div>`;
+    const opt = (key, list) => {
+      const v = g.settings[key];
+      if (!host) return `<div class="field"><label>${{ map: 'Map', size: 'Map size', rounds: 'Length', timer: 'Turn timer' }[key]}</label><div class="lob-val">${esc((list.find(([k]) => String(k) === String(v)) || ['', String(v)])[1])}</div></div>`;
+      return `<div class="field"><label for="lob-${key}">${{ map: 'Map', size: 'Map size', rounds: 'Length', timer: 'Turn timer' }[key]}</label><select id="lob-${key}" data-lob="set" data-key="${key}">${list.map(([k, l]) => `<option value="${k}" ${String(k) === String(v) ? 'selected' : ''}>${l}</option>`).join('')}</select></div>`;
+    };
+    const waiting = waitingFor(g), open = g.seats.filter((s) => !s.ai && !s.uid).length, friends = g.seats.filter((s) => !s.ai && s.uid && s.uid !== g.hostUid).length;
+    const startTip = waiting.length ? `Waiting for ${waiting.map((s) => s.name).join(', ')} to be ready.` : open ? `${open} open seat${open === 1 ? '' : 's'} will be played by the computer.` : 'Everyone is ready.';
+    const meSeat = g.seats.find((s) => s.uid === me);
+    g.lobbyEl.innerHTML = `<h2>Game lobby · <span style="letter-spacing:2px">${esc(P2P.code)}</span></h2>
+      ${host ? `<p class="lead">Send this link to your friends. They type a name and appear here; start when everyone is ready.</p>
+        <div class="lob-link"><input readonly value="${esc(joinLink(P2P.code))}" id="p2p-link"><button type="button" class="btn" data-lob="copy">Copy link</button></div>`
+      : `<p class="lead">${g.full ? 'The lobby is full: you can watch the game.' : meSeat && meSeat.ready ? '<span class="spin"></span> You are ready. Waiting for the host to start.' : 'Pick your colour and flag, then press <b>Ready</b>.'}</p>`}
+      <div class="setup-grid">
+        <section><h3>Houses</h3><div class="lob-seats">${rows}</div>
+          ${host && g.seats.length < 8 ? '<button type="button" class="btn small" data-lob="add">Add a house</button>' : ''}</section>
+        <section><h3>The realm</h3>${opt('map', MAPS)}${opt('size', SIZES)}${opt('rounds', ROUNDS)}${opt('timer', TIMERS)}</section>
+      </div>
+      <div class="modal-actions"><span class="estimate" style="margin-right:auto">${esc(host ? startTip : `${friends + 1} of ${g.seats.filter((s) => !s.ai).length} human seats taken.`)}</span>
+        <button type="button" class="btn" data-lob="leave">${host ? 'Close the lobby' : 'Leave'}</button>
+        ${host ? `<button type="button" class="btn primary" data-lob="start" ${waiting.length ? `aria-disabled="true" data-tip="${esc(startTip)}"` : ''}>Start game</button>` : ''}</div>`;
+    if (active && active.id) { const el = g.lobbyEl.querySelector('#' + active.id); if (el && 'value' in el) { el.value = active.v; el.focus(); try { el.setSelectionRange(active.s, active.s); } catch (e) { /* selects */ } } }
+  }
+  function nextColor(g, from) {
+    const used = new Set(g.seats.map((s) => s.color));
+    let c = from;
+    for (let k = 0; k < 8; k++) { c = (c + 1) % 8; if (!used.has(c)) return c; }
+    return from;
+  }
+  // a change to your own seat: the host applies it at once, a friend asks the host
+  function changeMine(patch) {
+    const g = P2P.game;
+    if (P2P.role === 'host') { const s = g.seats.find((x) => x.uid === myId()); if (s) Object.assign(s, patch); hostChanged(); }
+    else send(g.conn, Object.assign({ t: 'set' }, patch));
   }
   function onLobbyClick(e) {
-    const b = e.target.closest('[data-lobby]');
-    if (!b) return;
-    const act = b.dataset.lobby;
+    const b = e.target.closest('[data-lob]');
+    const g = P2P.game;
+    if (!b || !g) return;
+    if (b.getAttribute('aria-disabled') === 'true') { App().hint(b.dataset.tip || 'Not yet.'); return; }
+    const act = b.dataset.lob, i = +b.dataset.i, host = P2P.role === 'host', s = g.seats[i];
     if (act === 'copy') {
-      const inp = P2P.game.lobbyEl.querySelector('#p2p-link');
+      const inp = g.lobbyEl.querySelector('#p2p-link');
       const done = () => { b.textContent = 'Copied'; setTimeout(() => { b.textContent = 'Copy link'; }, 1500); };
       if (navigator.clipboard) navigator.clipboard.writeText(inp.value).then(done, () => { inp.select(); document.execCommand('copy'); done(); });
       else { inp.select(); document.execCommand('copy'); done(); }
-    } else if (act === 'leave') { leave(); App().closeAllModals(); App().showSetup(); }
-    else if (act === 'start') startHosted();
+    } else if (act === 'leave') { if (host) broadcast({ t: 'closed' }); leave(); App().closeAllModals(); history.replaceState(null, '', location.pathname); App().showSetup(); }
+    else if (act === 'start' && host) startHosted();
+    else if (act === 'ready') { const me = g.seats.find((x) => x.uid === myId()); changeMine({ ready: !(me && me.ready) }); }
+    else if (act === 'flag') {
+      App().editFlag(s.flag, colorHex(s.color)).then((f) => {
+        if (f === undefined) return;
+        store(PREF_KEY, Object.assign(load(PREF_KEY) || {}, { onlineFlag: f }));
+        changeMine({ flag: f });
+      });
+    } else if (act === 'color') {
+      if (s.uid === myId()) changeMine({ color: nextColor(g, s.color) });
+      else if (host) { s.color = nextColor(g, s.color); hostChanged(); }
+    } else if (!host) return;
+    else if (act === 'open') { s.ai = false; s.name = s.name || 'Open seat'; hostChanged(); }
+    else if (act === 'cpu') { s.ai = true; hostChanged(); }
+    else if (act === 'remove') { g.seats.splice(i, 1); hostChanged(); }
+    else if (act === 'add') {
+      const name = CC.HOUSE_NAMES.find((n) => !g.seats.some((x) => x.name === n)) || `House ${g.seats.length + 1}`;
+      g.seats.push({ name, color: nextColor(g, 0), ai: false, flag: null, uid: null, ready: false });
+      hostChanged();
+    }
+  }
+  function onLobbyChange(e) {
+    const el = e.target, g = P2P.game;
+    if (!g || !el.dataset.lob) return;
+    if (el.dataset.lob === 'name') {
+      const i = +el.dataset.i, name = el.value.trim().slice(0, 24) || g.seats[i].name;
+      if (g.seats[i].uid === myId()) { store(PREF_KEY, Object.assign(load(PREF_KEY) || {}, { onlineName: name })); changeMine({ name }); }
+      else if (P2P.role === 'host') { g.seats[i].name = name; hostChanged(); }
+    } else if (el.dataset.lob === 'set' && P2P.role === 'host') {
+      const k = el.dataset.key;
+      g.settings[k] = k === 'rounds' || k === 'timer' ? +el.value : el.value;
+      hostChanged();
+    }
   }
 
   // ------------------------------------------------------------ host
   async function hostNew() {
     const cfg = P2P.startConfig();
-    const me = myId(), firstHuman = cfg.players.findIndex((p) => !p.ai);
-    if (firstHuman < 0) { App().hint('Mark at least one house as Human to play online.'); return; }
-    const seats = cfg.players.map((p, i) => ({ name: p.name, color: p.color, ai: p.ai, flag: p.flag || null, uid: i === firstHuman ? me : null }));
-    await openHost(makeCode(), { seats, settings: cfg, started: false, save: null, rev: 0 });
+    const me = myId(), prefs = load(PREF_KEY) || {};
+    const first = Math.max(0, cfg.players.findIndex((p) => !p.ai));
+    // the start screen's houses carry over: you take the first human seat, other human seats wait for friends
+    const seats = cfg.players.map((p, i) => ({ name: p.name, color: p.color, ai: i === first ? false : p.ai, flag: i === first ? p.flag || prefs.onlineFlag || null : null, uid: i === first ? me : null, ready: i === first }));
+    const settings = { map: cfg.map || 'realm', size: cfg.size || 'normal', rounds: cfg.rounds != null ? cfg.rounds : 15, timer: cfg.timer || 0, seed: cfg.seed };
+    await openHost(makeCode(), { seats, settings, started: false, save: null, rev: 0, hostUid: me });
   }
   async function resumeHost() {
     const h = load(HOST_KEY);
     if (!h) return;
-    await openHost(h.code, { seats: h.seats, settings: h.settings, started: true, save: h.save, rev: h.rev || 1 });
+    await openHost(h.code, { seats: h.seats, settings: h.settings, started: true, save: h.save, rev: h.rev || 1, hostUid: myId() });
   }
   async function openHost(code, game) {
     leave();
     P2P.role = 'host'; P2P.code = code;
-    const g = P2P.game = Object.assign({ conns: new Map(), lobbyEl: null }, game);
-    if (!g.started) g.lobbyEl = lobbyModal('Hosting');
+    const g = P2P.game = Object.assign({ lobbyEl: null, watchers: [] }, game);
+    if (!g.started) g.lobbyEl = lobbyModal('Opening a lobby');
     else App().hint('Reopening your game…');
     try { P2P.peer = await openPeer(PREFIX + code); }
     catch (e) {
-      if (g.lobbyEl) g.lobbyEl.innerHTML = `<h2>Could not open the room</h2><p class="lead">${e && e.type === 'unavailable-id' ? 'That room is still open in another tab or browser. Close it, wait a few seconds, then try again.' : 'The connection service did not answer. Check your internet connection and try again.'}</p><div class="modal-actions"><button class="btn primary" type="button" data-lobby="leave">Back</button></div>`;
+      if (g.lobbyEl) g.lobbyEl.innerHTML = `<h2>Could not open the lobby</h2><p class="lead">${e && e.type === 'unavailable-id' ? 'That room is still open in another tab or browser. Close it, wait a few seconds, then try again.' : 'The connection service did not answer. Check your internet connection and try again.'}</p><div class="modal-actions"><button class="btn primary" type="button" data-lob="leave">Back</button></div>`;
       else App().hint('Could not reopen the room. Try again in a few seconds.');
       return;
     }
     P2P.peer.on('connection', (conn) => {
       conn.on('data', (m) => onHostData(conn, m));
-      conn.on('close', () => { for (const s of g.seats) if (s.conn === conn) { s.online = false; s.conn = null; } renderLobby(); if (g.started) App().renderAll(); });
+      conn.on('close', () => onHostClose(conn));
     });
-    P2P.peer.on('disconnected', () => { try { P2P.peer.reconnect(); } catch (e) { /* retry on next action */ } });
+    P2P.peer.on('disconnected', () => { try { P2P.peer.reconnect(); } catch (e) { /* retried on the next action */ } });
     if (g.started) { App().closeAllModals(); App().startLoaded(CC.deserialize(g.save), session); }
     else renderLobby();
   }
-  function lobbyMsg() { const g = P2P.game; return { t: 'lobby', code: P2P.code, started: g.started, seats: g.seats.map(({ conn, ...s }) => s) }; }
-  function broadcast(msg, except) { for (const s of P2P.game.seats) if (s.conn && s.conn !== except) send(s.conn, msg); }
+  function lobbyMsg() { const g = P2P.game; return { t: 'lobby', code: P2P.code, started: g.started, hostUid: g.hostUid, settings: g.settings, seats: g.seats.map(({ conn, ...s }) => s) }; }
+  function broadcast(msg, except) {
+    const g = P2P.game;
+    for (const s of g.seats) if (s.conn && s.conn !== except) send(s.conn, msg);
+    for (const w of g.watchers || []) if (w !== except) send(w, msg);
+  }
+  function hostChanged() { broadcast(lobbyMsg()); renderLobby(); }
+  function onHostClose(conn) {
+    const g = P2P.game;
+    if (!g) return;
+    g.watchers = (g.watchers || []).filter((w) => w !== conn);
+    for (const s of g.seats) if (s.conn === conn) {
+      s.conn = null; s.online = false;
+      // before the game starts, a friend who leaves frees the seat for someone else
+      if (!g.started) { s.uid = null; s.ready = false; }
+    }
+    if (g.started) App().renderAll(); else hostChanged();
+  }
   function onHostData(conn, m) {
     const g = P2P.game;
     if (!g || !m || typeof m !== 'object') return;
+    const seat = g.seats.find((s) => s.conn === conn);
     if (m.t === 'hello') {
-      let i = g.seats.findIndex((s) => s.uid === m.cid);
-      if (i < 0 && !g.started) {
-        i = g.seats.findIndex((s) => !s.ai && !s.uid);
-        if (i >= 0) {
-          g.seats[i].uid = m.cid;
-          if (m.name) g.seats[i].name = String(m.name).slice(0, 24);
-          if (CC.validFlag(m.flag)) g.seats[i].flag = m.flag;
+      let s = g.seats.find((x) => x.uid === m.cid);
+      if (!s && !g.started) {
+        s = g.seats.find((x) => !x.ai && !x.uid);
+        if (s) {
+          Object.assign(s, { uid: m.cid, ready: false });
+          if (m.name) s.name = String(m.name).slice(0, 24);
+          if (CC.validFlag(m.flag)) s.flag = m.flag;
         }
       }
-      if (i >= 0) { g.seats[i].conn = conn; g.seats[i].online = true; }
-      else (g.watchers = g.watchers || []).push(conn);
-      send(conn, { t: 'welcome', seat: i });
+      if (s) { s.conn = conn; s.online = true; } else g.watchers.push(conn);
       send(conn, lobbyMsg());
       if (g.started) send(conn, { t: 'state', save: CC.serialize(App().st), rev: g.rev });
-      broadcast(lobbyMsg(), conn);
-      renderLobby();
+      else hostChanged();
       if (g.started) App().renderAll();
-    } else if (m.t === 'state' && g.started) {
+    } else if (m.t === 'set' && seat && !g.started) {
+      if (typeof m.ready === 'boolean') seat.ready = m.ready;
+      if (typeof m.name === 'string' && m.name.trim()) seat.name = m.name.trim().slice(0, 24);
+      if (m.flag === null || CC.validFlag(m.flag)) seat.flag = m.flag;
+      if (Number.isInteger(m.color) && m.color >= 0 && m.color < 8 && !g.seats.some((x) => x !== seat && x.color === m.color)) seat.color = m.color;
+      hostChanged();
+    } else if (m.t === 'state' && g.started && seat) {
       // a move from the player whose turn it is: keep it if it is new, and pass it on
-      const seat = g.seats.findIndex((s) => s.conn === conn);
-      if (seat < 0 || !(m.rev > g.rev)) return;
+      if (!(m.rev > g.rev)) return;
       let st;
       try { st = CC.deserialize(m.save); } catch (e) { return; }
       g.rev = m.rev;
       App().replaceState(st);
       saveHosted();
-      for (const s of g.seats) if (s.conn && s.conn !== conn) send(s.conn, m);
-      for (const w of g.watchers || []) send(w, m);
+      broadcast(m, conn);
     }
   }
   function startHosted() {
     const g = P2P.game;
+    if (waitingFor(g).length) return;
     for (const s of g.seats) if (!s.ai && !s.uid) s.ai = true;
-    const cfg = g.settings;
-    const st = CC.newGame({ players: g.seats.map((s) => ({ name: s.name, color: s.color, ai: s.ai, flag: s.flag || null })), size: cfg.size, map: cfg.map, rounds: cfg.rounds, timer: cfg.timer, seed: cfg.seed });
+    const c = g.settings;
+    const st = CC.newGame({ players: g.seats.map((s) => ({ name: s.name, color: s.color, ai: s.ai, flag: s.flag || null })), size: c.size, map: c.map, rounds: c.rounds, timer: c.timer, seed: c.seed });
     g.started = true; g.rev = 1;
     broadcast(lobbyMsg());
     broadcast({ t: 'state', save: CC.serialize(st), rev: g.rev });
@@ -218,42 +339,47 @@
     store(HOST_KEY, { code: P2P.code, seats: g.seats.map(({ conn, online, ...s }) => s), settings: g.settings, save: CC.serialize(App().st), rev: g.rev, at: Date.now() });
   }
 
-  // ------------------------------------------------------------ guest
+  // ------------------------------------------------------------ friend
   async function join(code, name) {
     if (!code) return;
     leave();
     P2P.role = 'guest'; P2P.code = code;
-    const g = P2P.game = { seats: [], seat: -1, rev: 0, started: false, lobbyEl: lobbyModal(`Joining ${code}`), conn: null, inGame: false };
+    const g = P2P.game = { seats: [], settings: {}, rev: 0, started: false, lobbyEl: lobbyModal(`Joining ${code}`), conn: null, inGame: false, name };
     store(JOIN_KEY, { code, at: Date.now() });
     try { P2P.peer = await openPeer(null); }
-    catch (e) { g.lobbyEl.innerHTML = '<h2>Could not connect</h2><p class="lead">The connection service did not answer. Check your internet connection and try again.</p><div class="modal-actions"><button class="btn primary" type="button" data-lobby="leave">Back</button></div>'; return; }
-    connectToHost(name);
+    catch (e) { g.lobbyEl.innerHTML = '<h2>Could not connect</h2><p class="lead">The connection service did not answer. Check your internet connection and try again.</p><div class="modal-actions"><button class="btn primary" type="button" data-lob="leave">Back</button></div>'; return; }
+    connectToHost();
   }
-  function connectToHost(name) {
+  function connectToHost() {
     const g = P2P.game;
     if (!g || P2P.role !== 'guest') return;
     const conn = P2P.peer.connect(PREFIX + P2P.code, { reliable: true });
     g.conn = conn;
     const giveUp = setTimeout(() => {
       if (conn.open || P2P.game !== g) return;
-      if (!g.inGame && g.lobbyEl) g.lobbyEl.innerHTML = `<h2>No game at ${esc(P2P.code)}</h2><p class="lead">Check the code, and make sure the host has the game open in their browser.</p><div class="modal-actions"><button class="btn primary" type="button" data-lobby="leave">Back</button></div>`;
-      else retry(name);
+      if (!g.inGame && !g.seats.length && g.lobbyEl) g.lobbyEl.innerHTML = `<h2>No game at ${esc(P2P.code)}</h2><p class="lead">Check the link, and make sure the host still has the lobby open.</p><div class="modal-actions"><button class="btn primary" type="button" data-lob="leave">Back</button></div>`;
+      else retry();
     }, 12000);
-    conn.on('open', () => { clearTimeout(giveUp); g.online = true; send(conn, { t: 'hello', cid: myId(), name, flag: (load(PREF_KEY) || {}).onlineFlag || null }); if (g.inGame) App().renderAll(); });
+    conn.on('open', () => { clearTimeout(giveUp); g.online = true; send(conn, { t: 'hello', cid: myId(), name: g.name, flag: (load(PREF_KEY) || {}).onlineFlag || null }); if (g.inGame) App().renderAll(); });
     conn.on('data', (m) => onGuestData(m));
-    conn.on('close', () => { if (P2P.game !== g) return; g.online = false; if (g.inGame) { App().hint('Lost the host. Reconnecting…'); App().renderAll(); } retry(name); });
+    conn.on('close', () => { if (P2P.game !== g) return; g.online = false; if (g.inGame) { App().hint('Lost the host. Reconnecting…'); App().renderAll(); } retry(); });
   }
-  function retry(name) {
+  function retry() {
     const g = P2P.game;
     clearTimeout(g && g.retryTimer);
-    if (g && P2P.role === 'guest') g.retryTimer = setTimeout(() => { if (P2P.game === g && !g.online) connectToHost(name); }, 4000);
+    if (g && P2P.role === 'guest' && !g.closed) g.retryTimer = setTimeout(() => { if (P2P.game === g && !g.online) connectToHost(); }, 4000);
   }
   function onGuestData(m) {
     const g = P2P.game;
     if (!g || !m || typeof m !== 'object') return;
-    if (m.t === 'welcome') g.seat = m.seat;
-    else if (m.t === 'lobby') { g.seats = m.seats; g.started = m.started; if (!g.inGame) renderLobby(); else App().renderAll(); }
-    else if (m.t === 'state') {
+    if (m.t === 'lobby') {
+      Object.assign(g, { seats: m.seats, settings: m.settings || {}, started: m.started, hostUid: m.hostUid });
+      g.full = !m.seats.some((s) => s.uid === myId());
+      if (!g.inGame) renderLobby(); else App().renderAll();
+    } else if (m.t === 'closed') {
+      g.closed = true;
+      if (!g.inGame && g.lobbyEl) g.lobbyEl.innerHTML = '<h2>The host closed the lobby</h2><p class="lead">Ask them for a new link.</p><div class="modal-actions"><button class="btn primary" type="button" data-lob="leave">Back</button></div>';
+    } else if (m.t === 'state') {
       if (!(m.rev > g.rev) && g.inGame) return;
       let st;
       try { st = CC.deserialize(m.save); } catch (e) { App().hint('This game could not be loaded.'); return; }
@@ -274,7 +400,7 @@
       const st = App().st;
       g.rev++;
       const msg = { t: 'state', save: CC.serialize(st), rev: g.rev };
-      if (P2P.role === 'host') { broadcast(msg); for (const w of g.watchers || []) send(w, msg); saveHosted(); }
+      if (P2P.role === 'host') { broadcast(msg); saveHosted(); }
       else send(g.conn, msg);
     }, 150);
   }

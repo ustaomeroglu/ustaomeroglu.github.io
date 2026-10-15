@@ -159,6 +159,20 @@ h1, h2, h3 { font-family: var(--display); font-weight: 400; margin: 0; text-wrap
 .pane-head .tag { margin-left: auto; }
 .tag { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.08em; border: 1px solid var(--rule); border-radius: 999px; padding: 2px 8px; color: var(--parch-dim); white-space: nowrap; }
 .tag.gilt { color: var(--gilt); border-color: var(--gilt); }
+.tag.ready { color: var(--moss); border-color: var(--moss); }
+.join-box { max-width: 420px; }
+.lob-link { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; }
+.lob-link input { flex: 1; min-width: 200px; background: var(--ink); border: 1px solid var(--rule); border-radius: var(--r); padding: 7px 9px; }
+.lob-seats { display: grid; gap: 6px; margin-bottom: 8px; }
+.lob-seat { display: grid; grid-template-columns: auto auto minmax(0, 1fr) auto auto; gap: 8px; align-items: center; background: var(--board-2); border-radius: var(--r); padding: 6px 8px; }
+.lob-seat.me { box-shadow: inset 0 0 0 1px var(--gilt); }
+.lob-seat span.colorbtn { display: inline-block; cursor: default; }
+.lob-seat span.flagbtn { cursor: default; }
+.lob-who { display: flex; align-items: center; gap: 8px; min-width: 0; flex-wrap: wrap; }
+.lob-who input { min-width: 0; flex: 1; background: var(--ink); border: 1px solid var(--rule); border-radius: var(--r); padding: 5px 8px; }
+.lob-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lob-val { padding: 7px 0; color: var(--parch); }
+@media (max-width: 560px) { .lob-seat { grid-template-columns: auto auto minmax(0, 1fr) auto; } .lob-seat > :last-child:empty { display: none; } }
 .sub { color: var(--parch-dim); margin: 4px 0 10px; }
 .card h3 { font-size: 1rem; color: var(--gilt); margin: 14px 0 6px; }
 .ledger { display: grid; gap: 4px; margin: 8px 0 0; }
