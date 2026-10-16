@@ -296,13 +296,13 @@
       for (const t of s.tiles) if (t.owner === p) { if (t.b === 'farm') { farms++; if (t.river) rf++; } else if (t.b === 'mine') mines++; }
       const u = CC.Z();
       for (const a of s.armies) if (a.owner === p) a.u.forEach((n, k) => { u[k] += n; });
-      const trade = inc.routes.map((r) => `<tr class="${r.ok ? '' : 'neg'}"><td>${r.kind === 'market' ? `Market: ${esc(r.name)}` : `Trade with ${esc(r.name)}${r.bonus ? ` (${r.base} + ${r.bonus} from markets)` : ''}`}${r.ok ? '' : r.noHarbor ? ' (no harbor)' : r.noRoute ? ' (no route)' : ` (blocked by ${esc(CC.nameOf(s, r.blockedBy))})`}</td><td>${r.ok ? '+' + r.value : '0'}</td></tr>`).join('');
+      const trade = inc.routes.map((r) => `<tr class="${r.ok ? '' : 'neg'}"><td>${r.kind === 'market' ? `Market: ${esc(r.name)}${r.merchant ? '' : ' (warships: half)'}` : `Trade with ${esc(r.name)}${r.bonus ? ` (${r.base} + ${r.bonus} from markets)` : ''}`}${r.ok ? '' : r.settling ? ' (setting up trade)' : r.noHarbor ? ' (no harbor)' : r.noRoute ? ' (no route)' : ` (blocked by ${esc(CC.nameOf(s, r.blockedBy))})`}</td><td>${r.ok ? '+' + r.value : '0'}</td></tr>`).join('');
       return `<b>${P.gold} gold in the treasury</b><table class="tiptab">${towns}
         <tr><td>Farms: ${farms}${rf ? ` (${rf} by a river)` : ''}</td><td>+${inc.farms}</td></tr>
         <tr><td>Gold mines: ${mines}</td><td>+${inc.mines}</td></tr>
         ${trade}
         <tr class="neg"><td>Troops: ${CC.sum(u)} soldiers</td><td>−${inc.troops}</td></tr>
-        ${inc.ships ? `<tr class="neg"><td>Warships: ${inc.ships} × ${RULES.shipUpkeep}</td><td>−${inc.shipUpkeep}</td></tr>` : ''}
+        ${inc.ships || inc.merchants ? `<tr class="neg"><td>${[inc.ships ? `Warships: ${inc.ships} × ${RULES.shipUpkeep}` : '', inc.merchants ? `Merchant ships: ${inc.merchants} × ${RULES.merchantUpkeep}` : ''].filter(Boolean).join(' · ')}</td><td>−${inc.shipUpkeep}</td></tr>` : ''}
         ${inc.outposts ? `<tr class="neg"><td>Outposts: ${inc.outposts} × ${RULES.outpostUpkeep}</td><td>−${inc.outpostUpkeep}</td></tr>` : ''}
         ${inc.ports ? `<tr class="neg"><td>Ports: ${inc.ports} × ${RULES.portUpkeep}</td><td>−${inc.portUpkeep}</td></tr>` : ''}
         ${inc.atSea ? `<tr class="neg"><td>Ships for ${inc.atSea} soldiers at sea</td><td>−${inc.seaUpkeep}</td></tr>` : ''}
@@ -387,17 +387,17 @@
     }
     const inc = CC.income(s, s.cur), fs = CC.farmSlots(s, s.cur);
     const armies = s.armies.filter((a) => a.owner === s.cur && canMove(a));
-    const fleets = s.fleets.filter((f) => f.owner === s.cur && (CC.fleetMovesLeft(f) > 0 || !f.fired));
+    const fleets = s.fleets.filter((f) => f.owner === s.cur && (CC.fleetMovesLeft(f) > 0 || (!f.fired && !CC.isMerchant(f))));
     const offers = s.dip.offers.filter((o) => o.to === s.cur).length;
     const rows = armies.map((a) => `<li><button type="button" data-act="sel-army" data-id="${a.id}" ${tip(`${compText(a.u)}. ${stepsText(a)}.`)}>${mark(s, a.owner)}<b>${CC.sum(a.u)}</b><span class="meta">${esc(CC.placeName(s, a.tile))} · ${CC.movesLeft(a)} step${CC.movesLeft(a) === 1 ? '' : 's'}</span></button></li>`)
-      .concat(fleets.map((f) => `<li><button type="button" data-act="sel-fleet" data-id="${f.id}" ${tip(`${f.n} warship${f.n === 1 ? '' : 's'}. ${CC.fleetMovesLeft(f)} moves left${f.fired ? ', guns fired' : ', guns ready'}.`)}>${shipGlyph(CC.colorOf(s, f.owner))}<b>${f.n}</b><span class="meta">at sea · ${CC.fleetMovesLeft(f)} moves</span></button></li>`)).join('');
+      .concat(fleets.map((f) => `<li><button type="button" data-act="sel-fleet" data-id="${f.id}" ${tip(CC.isMerchant(f) ? `${f.n} ${shipWord(f, f.n)}. ${CC.fleetMovesLeft(f)} moves left.` : `${f.n} warship${f.n === 1 ? '' : 's'}. ${CC.fleetMovesLeft(f)} moves left${f.fired ? ', guns fired' : ', guns ready'}.`)}>${shipGlyph(CC.colorOf(s, f.owner))}<b>${f.n}</b><span class="meta">at sea · ${CC.fleetMovesLeft(f)} moves</span></button></li>`)).join('');
     return `<div class="pane-head">${mark(s, s.cur)}<h2>${esc(p.name)}</h2><span class="tag gilt">Your turn</span></div>
       <div class="chips">${chip('Gold', `${p.gold} <span class="${inc.net >= 0 ? 'pos' : 'neg'}">${signed(inc.net)}</span>`, tipFn('treasury'))}${chip('Orders', `${p.orders}/${CC.ordersPerTurn(s, s.cur)}`, tipFn('orders'))}${chip('Farms', `${fs.farms}/${fs.max}`, tipFn('farms'))}${inc.trade ? chip('Trade', `+${inc.trade}`, tipFn('treasury')) : ''}</div>
       ${offers ? `<div class="actions"><button class="btn primary" type="button" data-act="offers">${offers} offer${offers === 1 ? '' : 's'} waiting</button></div>` : ''}
       ${queueSection()}
       <h3>Ready to move</h3>
       ${rows ? `<ul class="list">${rows}</ul>` : '<p class="hint-text">Nothing left to move. Recruit, build, or end your turn.</p>'}
-      <p class="hint-text">Click to command · right-click to inspect · <kbd>N</kbd> next · <kbd>E</kbd> end turn</p>`;
+      <p class="hint-text">Click to command · right-click to go there or inspect · <kbd>N</kbd> next · <kbd>E</kbd> end turn</p>`;
   }
 
   function unitList(u) {
@@ -435,7 +435,7 @@
       <div class="quick"><button class="btn small" type="button" data-act="det-all" ${tip('Send the whole army')}>All</button><button class="btn small" type="button" data-act="det-half" ${tip('Send half, keep half here')}>Half</button><button class="btn small" type="button" data-act="det-one" ${tip('Send one soldier: enough to claim an empty tile or guard a farm')}>One</button></div>
       <div class="chips">${chip('Land', `${r.newTiles}/${r.cap}`, tipFn('capacity'), over ? 'bad' : '')}${chip('Steps', `${r.mp}/${r.mpMax}`, tipFn('range'), r.bad.size ? 'bad' : '')}${chip('Order', r.newTiles ? `1 of ${P.orders}` : 'free', tipFn('orders'))}${r.battles.length ? chip('Fatigue', `−${r.fatigue}`, tip('A won battle costs 1 to 4 extra steps; losing one ends the turn.')) : ''}</div>
       ${r.battles.length ? `<ul class="list">${battles}</ul>${r.battles.length > 1 ? `<p class="hint-text">Win them all ≈ <span class="pill ${oddsClass(r.pAll)}">${pct(r.pAll)}</span></p>` : ''}` : ''}
-      ${r.region.length ? `<p class="sub small">Ends at ${esc(CC.placeName(s, r.dest))}${r.destMoved ? ' (turns back out of the zone)' : ''}${r.usesSea ? ' · by ship' : ''}</p>` : '<p class="hint-text">Paint tiles on the map to march. Paint onto another of your armies to join it.</p>'}
+      ${r.region.length ? `<p class="sub small">Ends at ${esc(CC.placeName(s, r.dest))}${r.destMoved ? ' (turns back out of the zone)' : ''}${r.usesSea ? ' · by ship' : ''}</p>` : '<p class="hint-text">Paint tiles on the map to march, or right-click a tile to march there at once. Paint onto another of your armies to join it.</p>'}
       ${err ? `<p class="err">${esc(err)}</p>` : ''}
       <div class="actions"><button class="btn primary" type="button" data-act="march" ${gate(r.valid, r.errors[0] || 'Paint tiles on the map first.', pl.queue ? 'Save this march; it sets off when your turn begins (Enter)' : 'Go (Enter)')}>${pl.queue ? 'Queue march' : r.battles.length ? 'Attack' : r.newTiles ? 'March and claim' : 'March'}</button>
         <button class="btn" type="button" data-act="clear" ${gate(r.region.length, 'Nothing painted yet.', 'Erase the painted tiles (Esc)')}>Clear</button>
@@ -458,21 +458,29 @@
   const sendN = (f) => (App.fleetN && App.fleetN.id === f.id ? Math.max(1, Math.min(f.n, App.fleetN.n)) : f.n);
   function shipGlyph(color) { return `<svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M2 10h12l-2 3H4z" fill="#5a3d22" stroke="#1d1812"/><path d="M8 2v8" stroke="#1d1812"/><path d="M8.5 2.5Q13 6 8.5 9.5z" fill="${color}" stroke="#1d1812" stroke-width=".8"/></svg>`; }
 
+  const shipWord = (f, n) => (CC.isMerchant(f) ? (n === 1 ? 'merchant ship' : 'merchant ships') : n === 1 ? 'warship' : 'warships');
+  // what a fleet earns at a trading post, or how long until it starts to
+  function postText(f, post) {
+    const v = CC.isMerchant(f) ? post.value : Math.ceil(post.value / 2), wait = RULES.postSetup + 1 - CC.stayOf(f);
+    return { v, wait, line: wait > 0 ? `Setting up trade at ${post.name}: it starts paying +${v} gold a turn ${wait === 1 ? 'next turn' : `in ${wait} turns`}, while the ships stay.` : `Holding ${post.name}: +${v} gold a turn while the sea route home is open.`,
+      note: CC.isMerchant(f) ? '' : ` Merchant ships would earn the full ${post.value}; warships earn half.` };
+  }
   function panelFleet(f) {
     const s = App.st, own = f.owner === s.cur && myTurn();
-    const top = head(CC.colorOf(s, f.owner), `${own ? 'Fleet' : esc(CC.nameOf(s, f.owner))} · ${f.n} warship${f.n === 1 ? '' : 's'}`, 'At sea', f.owner);
+    const top = head(CC.colorOf(s, f.owner), `${own ? 'Fleet' : esc(CC.nameOf(s, f.owner))} · ${f.n} ${shipWord(f, f.n)}`, 'At sea', f.owner);
     if (!own) return top + `<p class="hint-text">Sail one of your fleets onto it to attack.</p>`;
     const targets = CC.bombardTargets(s, f.id);
-    const post = (s._posts || []).find((p) => p.tile === f.tile);
+    const post = (s._posts || []).find((p) => p.tile === f.tile), pt = post && postText(f, post);
     const tlist = targets.map((i) => { const a = CC.armyAt(s, i); return `<li><button type="button" data-act="bombard" data-i="${i}" ${tip(`Each ship rolls 2d6 and kills a soldier on ${CC.cityAt(s, i) ? RULES.bombardWallHit : RULES.bombardHit}+${CC.cityAt(s, i) ? ' (behind walls)' : ''}. They cannot shoot back.`)}>${mark(s, a.owner)}${esc(CC.placeName(s, i))}<span class="meta">${CC.sum(a.u)} soldiers</span></button></li>`; }).join('');
     return top + `
       ${f.n > 1 && CC.fleetMovesLeft(f) ? (() => { const k = sendN(f); return `<div class="units"><div class="unit-row"><div class="nm" ${tip('Send part of the fleet; the rest stay here as their own fleet. Small fleets (up to ' + RULES.riverShips + ' ships) can sail up rivers.')}>Ships sailing</div>
         <div class="stepper"><button type="button" data-act="fdet" data-d="-1" ${gate(k > 1, 'At least one ship sails.', 'Keep one more ship here')} aria-label="Fewer ships">−</button><output>${k}/${f.n}</output><button type="button" data-act="fdet" data-d="1" ${gate(k < f.n, 'The whole fleet is sailing.', 'Send one more ship')} aria-label="More ships">+</button></div></div></div>
         <div class="quick"><button class="btn small" type="button" data-act="fdet-all" ${tip('Sail with the whole fleet')}>All</button><button class="btn small" type="button" data-act="fdet-half" ${tip('Send half, keep half here')}>Half</button><button class="btn small" type="button" data-act="fdet-one" ${tip('Send a single ship')}>One</button></div>`; })() : ''}
-      <div class="chips">${chip('Moves', `${CC.fleetMovesLeft(f)}/${RULES.fleetMP}`)}${chip('Guns', f.fired ? 'fired' : 'ready', '', f.fired ? 'bad' : '')}${post ? chip('Market', `+${post.value}`, tip(`Holding ${post.name}. It pays while the sea route home is open.`)) : ''}</div>
-      <p class="hint-text">${CC.fleetMovesLeft(f) || !f.fired ? 'Click a sea tile or river to sail · an enemy ship to attack · a red-marked army on the shore to bombard.' : 'Done for this turn.'}</p>
+      <div class="chips">${chip('Moves', `${CC.fleetMovesLeft(f)}/${RULES.fleetMP}`)}${CC.isMerchant(f) ? chip('Strength', `×${RULES.merchantPow}`, tip('Merchant ships fight at half a warship\'s strength and carry no guns.')) : chip('Guns', f.fired ? 'fired' : 'ready', '', f.fired ? 'bad' : '')}${post ? chip('Market', pt.wait > 0 ? 'setting up' : `+${pt.v}`, tip(pt.line + pt.note), pt.wait > 0 ? 'bad' : '') : ''}</div>
+      ${post ? `<p class="sub small">${esc(pt.line)}</p>` : ''}
+      <p class="hint-text">${CC.fleetMovesLeft(f) || !f.fired ? (CC.isMerchant(f) ? 'Click a sea tile or river to sail, or right-click to sail there at once. Merchant ships earn the full gold of a trading post.' : 'Click a sea tile or river to sail · an enemy ship to attack · a red-marked army on the shore to bombard. Right-click sails there at once.') : 'Done for this turn.'}</p>
       ${tlist ? `<h3>Bombard</h3><ul class="list">${tlist}</ul>` : ''}
-      ${blockadeList(f)}`;
+      ${CC.isMerchant(f) ? '' : blockadeList(f)}`;
   }
   // enemy trade passing this fleet's tile: block it house by house
   function blockadeList(f) {
@@ -499,10 +507,11 @@
     html += `<div class="chips">${chip('Walls', c.walls, tip(`Defenders ×${RULES.walls.mult[c.walls]}. Archers on walls fight twice as hard.`))}${chip('Defense', D.toFixed(1), tip('What an attacker must beat before dice.'))}${c.owner >= 0 ? chip('Gold', `+${inc}`) : ''}</div>
       <p class="sub small">${g ? compText(g.u) : 'No garrison'} + ${1 + c.walls} militia${built ? ` · ${built}` : ''}</p>`;
     const tr = CC.training(c);
-    if (c.owner === s.cur && (CC.sum(tr.u) || tr.ships)) {
+    if (c.owner === s.cur && (CC.sum(tr.u) || tr.ships || tr.merchants)) {
       // what is in training, each kind with a refund button while it is still your turn
       const rows = UN.map((d, k) => [k, tr.u[k], tr.u[k] === 1 ? d.one : d.name, d.cost]).filter((x) => x[1])
-        .concat(tr.ships ? [['ships', tr.ships, tr.ships === 1 ? 'Warship' : 'Warships', RULES.shipCost]] : []);
+        .concat(tr.ships ? [['ships', tr.ships, tr.ships === 1 ? 'Warship' : 'Warships', RULES.shipCost]] : [])
+        .concat(tr.merchants ? [['merchants', tr.merchants, tr.merchants === 1 ? 'Merchant ship' : 'Merchant ships', RULES.merchantCost]] : []);
       html += `<h3 ${tip('Recruits train for a turn. They join the garrison, ready to march, at the start of your next turn. If the town falls first, they are lost.')}>In training · ready next turn</h3><div class="buy-list">${rows.map(([k, n, name, cost]) => `<div class="buy"><div class="nm">${n} ${name}</div>
         ${own ? `<div class="btns"><button class="btn small" type="button" data-act="untrain" data-k="${k}" data-n="1" ${tip(`Cancel one and get ${cost} gold back`)}>−1</button>${n > 1 ? `<button class="btn small" type="button" data-act="untrain" data-k="${k}" ${tip(`Cancel all ${n} and get ${cost * n} gold back`)}>Cancel all</button>` : ''}</div>` : ''}</div>`).join('')}</div>`;
     }
@@ -522,9 +531,11 @@
           ${n5 > 1 ? `<button class="btn small" type="button" data-act="recruit" data-k="${k}" data-n="${n5}" ${gate(r5.ok, r5.reason, `Train ${n5} for ${r5.cost} gold, ready next turn`)}>+${n5}</button>` : ''}</div></div>`;
       });
       if (CC.isCoastal(s, c.tile)) {
-        const w = CC.canRecruitShips(s, s.cur, c.id, 1);
-        html += `<div class="buy"><div class="nm" ${tip(`Warships fight at sea, hold distant markets, block trade routes and bombard armies on the shore. Attack ${RULES.shipAtt} · defense ${RULES.shipDef} · upkeep ${RULES.shipUpkeep}.`)}>Warship <span class="cost">${RULES.shipCost}g</span></div>
-          <div class="btns"><button class="btn small" type="button" data-act="ships" data-n="1" ${gate(w.ok, w.reason, `Build a warship for ${w.cost} gold, at sea next turn`)}>+1</button></div></div>`;
+        const w = CC.canRecruitShips(s, s.cur, c.id, 1), m = CC.canRecruitShips(s, s.cur, c.id, 1, 'merchant');
+        html += `<div class="buy"><div class="nm" ${tip(WARSHIP_TIP())}>Warship <span class="cost">${RULES.shipCost}g</span></div>
+          <div class="btns"><button class="btn small" type="button" data-act="ships" data-n="1" ${gate(w.ok, w.reason, `Build a warship for ${w.cost} gold, at sea next turn`)}>+1</button></div></div>
+          <div class="buy"><div class="nm" ${tip(MERCHANT_TIP())}>Merchant ship <span class="cost">${RULES.merchantCost}g</span></div>
+          <div class="btns"><button class="btn small" type="button" data-act="ships" data-kind="merchant" data-n="1" ${gate(m.ok, m.reason, `Build a merchant ship for ${m.cost} gold, at sea next turn`)}>+1</button></div></div>`;
       }
       html += '</div>';
     } else {
@@ -570,6 +581,8 @@
     return html;
   }
 
+  const WARSHIP_TIP = () => `Warships fight at sea, block trade routes and bombard armies on the shore. At a trading post they earn half its gold. Attack ${RULES.shipAtt} · defense ${RULES.shipDef} · upkeep ${RULES.shipUpkeep}.`;
+  const MERCHANT_TIP = () => `Merchant ships earn the full gold of a trading post, but fight at half a warship's strength, carry no guns and cannot blockade. Upkeep ${RULES.merchantUpkeep}.`;
   // a port of yours: build warships, see what is on the slipway
   function portSection(i) {
     const s = App.st, t = s.tiles[i];
@@ -577,10 +590,13 @@
     const d = CC.portOf(s, i), tr = CC.training(d), own = myTurn();
     let html = '<h3>Port</h3><p class="hint-text">Warships are built here, armies standing here can board ships, and sea trade can come home here.</p>';
     if (tr.ships) html += `<div class="buy-list"><div class="buy"><div class="nm">${tr.ships} warship${tr.ships === 1 ? '' : 's'} on the slipway · ready next turn</div>${own ? `<div class="btns"><button class="btn small" type="button" data-act="unpship" data-tile="${i}" ${tip(`Cancel one and get ${RULES.shipCost} gold back`)}>−1</button></div>` : ''}</div></div>`;
+    if (tr.merchants) html += `<div class="buy-list"><div class="buy"><div class="nm">${tr.merchants} merchant ship${tr.merchants === 1 ? '' : 's'} on the slipway · ready next turn</div>${own ? `<div class="btns"><button class="btn small" type="button" data-act="unpship" data-kind="merchant" data-tile="${i}" ${tip(`Cancel one and get ${RULES.merchantCost} gold back`)}>−1</button></div>` : ''}</div></div>`;
     if (own) {
-      const w = CC.canPortShips(s, s.cur, i, 1);
-      html += `<div class="buy-list"><div class="buy"><div class="nm" ${tip(`Warships fight at sea, hold trading posts, block routes and bombard the shore. Attack ${RULES.shipAtt} · defense ${RULES.shipDef} · upkeep ${RULES.shipUpkeep}.`)}>Warship <span class="cost">${RULES.shipCost}g</span></div>
-        <div class="btns"><button class="btn small" type="button" data-act="pships" data-tile="${i}" ${gate(w.ok, w.reason, `Build a warship for ${w.cost} gold, at sea next turn`)}>+1</button></div></div></div>`;
+      const w = CC.canPortShips(s, s.cur, i, 1), m = CC.canPortShips(s, s.cur, i, 1, 'merchant');
+      html += `<div class="buy-list"><div class="buy"><div class="nm" ${tip(WARSHIP_TIP())}>Warship <span class="cost">${RULES.shipCost}g</span></div>
+        <div class="btns"><button class="btn small" type="button" data-act="pships" data-tile="${i}" ${gate(w.ok, w.reason, `Build a warship for ${w.cost} gold, at sea next turn`)}>+1</button></div></div>
+        <div class="buy"><div class="nm" ${tip(MERCHANT_TIP())}>Merchant ship <span class="cost">${RULES.merchantCost}g</span></div>
+        <div class="btns"><button class="btn small" type="button" data-act="pships" data-kind="merchant" data-tile="${i}" ${gate(m.ok, m.reason, `Build a merchant ship for ${m.cost} gold, at sea next turn`)}>+1</button></div></div></div>`;
     }
     return html;
   }
@@ -593,7 +609,14 @@
       const names = { farm: 'Farm', mine: 'Gold mine', outpost: 'Outpost', castle: 'Castle', port: 'Port' };
       return `<h3>Being built</h3><div class="buy-list"><div class="buy"><div class="nm">${names[work.kind] || work.kind} · <span class="ok">ready next turn</span></div>${myTurn() ? `<button class="btn small" type="button" data-act="unbuild" data-id="${work.id}" ${tip(`Cancel and get ${work.cost} gold back`)}>Cancel</button>` : ''}</div></div>`;
     }
-    if (!(t.owner === s.cur && myTurn()) || t.b) return '';
+    if (!(t.owner === s.cur && myTurn())) return '';
+    if (t.b) {
+      const names = { farm: 'farm', mine: 'gold mine', tower: 'outpost', port: 'port' };
+      if (!names[t.b]) return '';
+      const r = CC.canDismantle(s, s.cur, i);
+      return `<h3>Rebuild</h3><div class="buy-list"><div class="buy"><div class="nm" ${tip('Pull it down to build something else here. No gold comes back.')}>Pull down the ${names[t.b]}</div>
+        <button class="btn small" type="button" data-act="dismantle" data-tile="${i}" ${gate(r.ok, r.reason, 'Pull it down now, then build something else here (no gold back)')}>Pull down</button></div></div>`;
+    }
     const fs = CC.farmSlots(s, s.cur);
     const opts = [
       ['farm', 'Farm', `+${RULES.farmIncome + (t.river ? RULES.riverFarmBonus : 0)} gold a turn. ${fs.farms} of ${fs.max} farms allowed (1 per ${RULES.tilesPerFarm} land).`],
@@ -667,17 +690,21 @@
       const r = CC.recruit(s, s.cur, App.sel.id, +b.dataset.k, +b.dataset.n);
       if (!r.ok) { sfx('deny'); hint(r.reason); } else { sfx('recruit'); App.R.pulse(s.cities[App.sel.id].tile, CC.colorOf(s, s.cur)); commit(); hint('In training: they join the garrison at the start of your next turn.'); }
     } else if (act === 'untrain') {
-      const k = b.dataset.k === 'ships' ? 'ships' : +b.dataset.k;
+      const k = b.dataset.k === 'ships' || b.dataset.k === 'merchants' ? b.dataset.k : +b.dataset.k;
       const r = CC.cancelTraining(s, s.cur, App.sel.id, k, b.dataset.n ? +b.dataset.n : null);
       if (!r.ok) { sfx('deny'); hint(r.reason); } else { sfx('coins', { n: Math.min(6, 1 + Math.round(r.refund / 15)) }); commit(); hint(`Cancelled: ${r.refund} gold back in the treasury.`); }
     } else if (act === 'pships' || act === 'unpship') {
       const tile = +b.dataset.tile;
-      const r = act === 'pships' ? CC.portShips(s, s.cur, tile, 1) : CC.cancelPortShips(s, s.cur, tile, 1);
+      const kind = b.dataset.kind;
+      const r = act === 'pships' ? CC.portShips(s, s.cur, tile, 1, kind) : CC.cancelPortShips(s, s.cur, tile, 1, kind);
       if (!r.ok) { sfx('deny'); hint(r.reason); }
-      else { sfx(act === 'pships' ? 'waves' : 'coins'); commit(); hint(act === 'pships' ? 'The shipwrights are at work: the warship puts to sea at the start of your next turn.' : `Cancelled: ${r.refund} gold back.`); }
+      else { sfx(act === 'pships' ? 'waves' : 'coins'); commit(); hint(act === 'pships' ? 'The shipwrights are at work: the ship puts to sea at the start of your next turn.' : `Cancelled: ${r.refund} gold back.`); }
+    } else if (act === 'dismantle') {
+      const r = CC.dismantle(s, s.cur, +b.dataset.tile);
+      if (!r.ok) { sfx('deny'); hint(r.reason); } else { sfx('erase'); commit(); hint('Pulled down. You can build something else here now.'); }
     } else if (act === 'ships') {
-      const r = CC.recruitShips(s, s.cur, App.sel.id, +b.dataset.n);
-      if (!r.ok) { sfx('deny'); hint(r.reason); } else { sfx('waves'); App.R.pulse(s.cities[App.sel.id].tile, CC.colorOf(s, s.cur)); commit(); hint('The shipwrights are at work: the warship puts to sea at the start of your next turn.'); }
+      const r = CC.recruitShips(s, s.cur, App.sel.id, +b.dataset.n, b.dataset.kind);
+      if (!r.ok) { sfx('deny'); hint(r.reason); } else { sfx('waves'); App.R.pulse(s.cities[App.sel.id].tile, CC.colorOf(s, s.cur)); commit(); hint('The shipwrights are at work: the ship puts to sea at the start of your next turn.'); }
     } else if (act === 'upgrade') {
       const r = CC.upgrade(s, s.cur, App.sel.id, b.dataset.kind);
       if (!r.ok) { sfx('deny'); hint(r.reason); } else { sfx('upgrade'); App.R.pulse(s.cities[App.sel.id].tile, '#ffd77a'); commit(); hint('Building: ready at the start of your next turn.'); }
@@ -742,7 +769,7 @@
   function clearPlan() {
     const pl = App.plan;
     if (!pl) return;
-    pl.region = []; pl.dest = CC.getArmy(App.st, pl.armyId).tile;
+    pl.region = []; pl.dest = CC.getArmy(App.st, pl.armyId).tile; pl.destPinned = false;
     refreshPlan(); renderAll();
   }
 
@@ -773,7 +800,7 @@
     if (mode === 'remove') {
       if (at < 0) return false;
       pl.region.splice(at, 1);
-      if (pl.dest === i) pl.dest = pl.region.length ? pl.region[pl.region.length - 1] : a.tile;
+      if (pl.dest === i) { pl.dest = pl.region.length ? pl.region[pl.region.length - 1] : a.tile; pl.destPinned = false; }
       sfx('erase');
       return true;
     }
@@ -784,7 +811,12 @@
       if (stroke) stroke.denied = true;
       return false;
     }
-    pl.region.push(i); pl.dest = i;
+    pl.region.push(i);
+    if (!pl.destPinned) {
+      // a march that storms a town or castle ends inside it, unless you pick another end (Shift-click)
+      const town = pl.region.slice().reverse().find((j) => s.tiles[j].b === 'city' && s.tiles[j].owner !== a.owner);
+      pl.dest = town != null ? town : i;
+    }
     sfx('paint');
     // painting an enemy opens its zone at once, so a drag can carry on past it
     if (CC.zocSources(s, a.owner).has(i)) refreshPlan();
@@ -960,14 +992,61 @@
     $('#z-fit').addEventListener('click', () => { R.fit(true); drawMap(); });
   }
 
+  // the tile a click means: an army's banner or a ship stands for the tile it is on, not the tile under the label
+  function aimAt(i, bid, sid, selfId) {
+    const s = App.st;
+    if (sid != null && sid !== selfId) { const f = CC.getFleet(s, sid); if (f) return f.tile; }
+    if (bid != null && bid !== selfId) { const a = CC.getArmy(s, bid); if (a) return a.tile; }
+    return i;
+  }
+  // right-click with something selected: go there now. A march paints its way there and sets off at once.
+  function goNow(i, bid, sid) {
+    const s = App.st, pl = App.plan;
+    const fl = App.sel && App.sel.kind === 'fleet' ? CC.getFleet(s, App.sel.id) : null;
+    if (fl && fl.owner === s.cur && myTurn()) {
+      const to = aimAt(i, null, sid, fl.id);
+      if (to < 0 || to === fl.tile) return true;
+      const plan = CC.planFleet(s, fl.id, to, sendN(fl));
+      if (plan.valid) { sail(to); return true; }
+      if (CC.bombardTargets(s, fl.id).includes(to)) { fireAt(to); return true; }
+      sfx('deny'); hint(plan.errors[0]); return true;
+    }
+    const sa = App.sel && App.sel.kind === 'army' ? CC.getArmy(s, App.sel.id) : null;
+    if (sa && sa.sea && sa.owner === s.cur && myTurn()) {
+      if (i < 0 || i === sa.tile) return true;
+      const plan = CC.planSail(s, sa.id, i);
+      if (plan.valid) sailTroops(i); else { sfx('deny'); hint(plan.errors[0]); }
+      return true;
+    }
+    if (!(pl && planOK())) return false;
+    const army = CC.getArmy(s, pl.armyId);
+    const to = aimAt(i, bid, null, pl.armyId);
+    if (!army || to < 0 || to === army.tile) return true;
+    if (!pl.region.includes(to)) {
+      // paint the way there: the foreign tiles along the shortest route the army may take
+      const r = asMe(() => CC.reach(s, pl.armyId, CC.sum(pl.u) ? pl.u : army.u, pl.region.concat([to]), false));
+      const way = r.dist[to] < Infinity ? chainTo(r.prev, army.tile, to).slice(1) : [to];
+      for (const j of way) {
+        if (pl.region.includes(j)) continue;
+        if (j !== to && s.tiles[j].owner === army.owner) continue;
+        if (!applyPaint(j, 'add')) { refreshPlan(); renderAll(); return true; }
+      }
+    }
+    pl.dest = to; pl.destPinned = true;
+    refreshPlan(); renderAll();
+    march();
+    return true;
+  }
+
   function clickAt(x, y, button, shift, alt) {
     const s = App.st, R = App.R;
-    const i = R.pick(x, y), bid = R.bannerAt(x, y), sid = R.shipAt(x, y);
+    let i = R.pick(x, y);
+    const bid = R.bannerAt(x, y), sid = R.shipAt(x, y);
     const pl = App.plan;
     hideInspect();
-    // right-click inspects whatever is there (and erases a painted tile while planning a march)
+    // right-click: with an army, fleet or ships selected, go there at once; otherwise inspect what is there
     if (button === 2) {
-      if (pl && planOK() && i >= 0 && pl.region.includes(i)) { applyPaint(i, 'remove'); refreshPlan(); renderAll(); return; }
+      if (goNow(i, bid, sid)) return;
       if (i >= 0) showInspect(i, x, y, sid);
       return;
     }
@@ -985,6 +1064,7 @@
       if (sid != null && sid !== fl.id) {
         const other = CC.getFleet(s, sid);
         if (other && other.owner === s.cur) { select({ kind: 'fleet', id: sid }); return; }
+        if (other) i = other.tile; // an enemy ship: aim at its tile, not the one under its label
       }
       const ram = s.tiles[i].t === 'water' && CC.planFleet(s, fl.id, i, sendN(fl)).valid; // sailing onto soldiers at sea beats a volley
       if (CC.bombardTargets(s, fl.id).includes(i) && !ram) { fireAt(i); return; }
@@ -1004,7 +1084,10 @@
     if (pl && planOK()) {
       const me = planner();
       const army = CC.getArmy(s, pl.armyId);
-      if (shift && i >= 0 && (pl.region.includes(i) || i === army.tile)) { pl.dest = i; refreshPlan(); renderAll(); return; }
+      if (shift && i >= 0 && (pl.region.includes(i) || i === army.tile)) { pl.dest = i; pl.destPinned = true; refreshPlan(); renderAll(); return; }
+      // an enemy army's banner stands for the tile it is on
+      const foe = bid != null && bid !== pl.armyId && CC.getArmy(s, bid);
+      if (foe && foe.owner !== me) i = foe.tile;
       if (!pl.region.length) {
         // nothing painted yet: clicks on other pieces switch what is selected (drag onto them to join them)
         const other = bid != null && bid !== pl.armyId && CC.getArmy(s, bid);
@@ -1043,10 +1126,16 @@
   function hoverAction(i, bid, sid) {
     const s = App.st, pl = App.plan;
     if (i < 0) return { cursor: 'arrow' };
-    const t = s.tiles[i];
+    let t = s.tiles[i];
     App.course = null;
     const fl = App.sel && App.sel.kind === 'fleet' ? CC.getFleet(s, App.sel.id) : null;
     if (fl && fl.owner === s.cur && myTurn()) {
+      const other = sid != null && sid !== fl.id ? CC.getFleet(s, sid) : null;
+      if (other && other.owner === s.cur) {
+        const ok = CC.planFleet(s, fl.id, other.tile, sendN(fl)).valid;
+        return { cursor: 'hand', line: `Click to command this fleet instead.${ok ? ' Right-click to sail there and join it.' : ''}` };
+      }
+      if (other) { i = other.tile; t = s.tiles[i]; sid = null; }
       if (CC.bombardTargets(s, fl.id).includes(i) && !(t.t === 'water' && CC.planFleet(s, fl.id, i, sendN(fl)).valid)) { const a = CC.armyAt(s, i); return { cursor: 'attack', line: `Bombard ${CC.sum(a.u)} soldiers: each of your ${fl.n} ship${fl.n === 1 ? '' : 's'} kills one on ${CC.cityAt(s, i) ? RULES.bombardWallHit : RULES.bombardHit}+ with 2d6. They cannot shoot back.`, cls: 'mid' }; }
       if ((t.t === 'water' || t.river) && i !== fl.tile) {
         const plan = CC.planFleet(s, fl.id, i, sendN(fl));
@@ -1055,9 +1144,10 @@
         if (!plan.valid) return { cursor: 'no', line: plan.errors[0], cls: 'bad' };
         const post = (s._posts || []).find((p) => p.tile === i), mate = CC.fleetAt(s, i);
         if (plan.battle && plan.battle.transport) return { cursor: 'attack', line: `Fall on ${plan.battle.n} soldiers at sea: ${pct(plan.battle.p)} chance to win. Most of them would drown.`, cls: oddsClass(plan.battle.p) };
-        if (plan.battle) return { cursor: 'attack', line: `Attack ${plan.battle.n} enemy warship${plan.battle.n === 1 ? '' : 's'}: ${pct(plan.battle.p)} chance to win.`, cls: oddsClass(plan.battle.p) };
+        if (plan.battle) return { cursor: 'attack', line: plan.battle.merchant ? `Attack ${plan.battle.n} enemy merchant ship${plan.battle.n === 1 ? '' : 's'}: ${pct(plan.battle.p)} chance to win.` : `Attack ${plan.battle.n} enemy warship${plan.battle.n === 1 ? '' : 's'}: ${pct(plan.battle.p)} chance to win.`, cls: oddsClass(plan.battle.p) };
         if (mate && mate.owner === s.cur) return { cursor: 'paint', line: `Sail here and join this fleet (${plan.path.length} moves).` };
-        return { cursor: 'paint', line: post ? `Sail to ${post.name} (${plan.path.length} moves). A fleet here earns +${post.value} gold a turn while its sea route home is open.` : `Sail here (${plan.path.length} move${plan.path.length === 1 ? '' : 's'}).` };
+        if (post) { const v = CC.isMerchant(fl) ? post.value : Math.ceil(post.value / 2); return { cursor: 'paint', line: `Sail to ${post.name} (${plan.path.length} moves). After a turn setting up trade, it earns +${v} gold a turn while the ships stay and the sea route home is open.${CC.isMerchant(fl) ? '' : ` Merchant ships would earn the full ${post.value}.`}` }; }
+        return { cursor: 'paint', line: `Sail here (${plan.path.length} move${plan.path.length === 1 ? '' : 's'}).` };
       }
     }
     const sa = App.sel && App.sel.kind === 'army' ? CC.getArmy(s, App.sel.id) : null;
@@ -1073,13 +1163,14 @@
     }
     if (sid != null && !(pl && pl.region.length)) {
       const f = CC.getFleet(s, sid);
-      if (f) return { cursor: 'hand', line: f.owner === s.cur && myTurn() ? `Click to command this fleet (${CC.fleetMovesLeft(f)} moves${f.fired ? '' : ', guns ready'}).` : `${f.n} warship${f.n === 1 ? '' : 's'} of ${CC.nameOf(s, f.owner)}.` };
+      if (f) return { cursor: 'hand', line: f.owner === s.cur && myTurn() ? `Click to command this fleet (${CC.fleetMovesLeft(f)} moves${f.fired || CC.isMerchant(f) ? '' : ', guns ready'}).` : CC.isMerchant(f) ? `${f.n} ${shipWord(f, f.n)} of ${CC.nameOf(s, f.owner)}.` : `${f.n} warship${f.n === 1 ? '' : 's'} of ${CC.nameOf(s, f.owner)}.` };
     }
     if (pl && planOK()) {
       const army = CC.getArmy(s, pl.armyId);
       if (!army) return { cursor: 'arrow' };
       const other = bid != null && bid !== pl.armyId && CC.getArmy(s, bid);
-      if (!pl.region.length && other && other.owner === planner()) return { cursor: 'hand', line: 'Click to command this army instead. To join it, Alt-click it or drag your path onto it.' };
+      if (!pl.region.length && other && other.owner === planner()) return { cursor: 'hand', line: 'Click to command this army instead. To join it, right-click it, Alt-click it or drag your path onto it.' };
+      if (other && other.owner !== planner()) { i = other.tile; t = s.tiles[i]; }
       if (i === army.tile) return { cursor: 'arrow', line: 'Your army stands here. Paint the tiles it should march to.' };
       if (pl.region.includes(i)) {
         if (pl.res && pl.res.bad.has(i)) return { cursor: 'erase', line: `${pl.res.errors.find((e) => /zone|range/.test(e)) || 'This painted tile cannot be reached.'} Click to erase it.`, cls: 'bad' };
@@ -1252,7 +1343,7 @@
       html += `<h4>${c ? 'Garrison' : a.sea ? 'Aboard ships: army' : 'Army'} of ${who(a.owner)} · ${CC.sum(a.u)}</h4><table class="tiptab">${UN.map((d, k) => (a.u[k] ? `<tr><td>${d.name}</td><td>${a.u[k]}</td></tr>` : '')).join('')}
         ${a.owner === s.cur ? `<tr><td>${a.sea ? 'Sea moves left' : 'Steps left'}</td><td>${CC.movesLeft(a)}</td></tr>` : ''}</table>`;
     }
-    if (f) html += `<h4>Fleet of ${who(f.owner)}</h4><table class="tiptab"><tr><td>Warships</td><td>${f.n}</td></tr>${f.owner === s.cur ? `<tr><td>Moves left</td><td>${CC.fleetMovesLeft(f)}</td></tr><tr><td>Guns</td><td>${f.fired ? 'fired' : 'ready'}</td></tr>` : ''}</table>`;
+    if (f) html += `<h4>Fleet of ${who(f.owner)}</h4><table class="tiptab"><tr><td>${CC.isMerchant(f) ? 'Merchant ships' : 'Warships'}</td><td>${f.n}</td></tr>${f.owner === s.cur ? `<tr><td>Moves left</td><td>${CC.fleetMovesLeft(f)}</td></tr>${CC.isMerchant(f) ? '' : `<tr><td>Guns</td><td>${f.fired ? 'fired' : 'ready'}</td></tr>`}` : ''}</table>`;
     if (post) html += `<h4>${esc(post.name)}</h4><p class="muted">A distant market: +${post.value} gold a turn to the house whose warship holds it, while the sea route home stays open.</p>`;
     if (T.passable && !c) html += `<p class="muted">Defenders here ×${T.def}${t.b === 'tower' ? ` · outpost ×${RULES.outpostDef}` : (t.b === 'farm' || t.b === 'mine') ? ` · palisade ×${RULES.structureDef}` : ''}</p>`;
     el.innerHTML = html;
@@ -1449,14 +1540,14 @@
     modal(`<h2>How to play</h2><p class="lead">Grow from one castle into a realm. The game ends after the last round, or when a single house remains.</p>
       <div class="rules">
         <section><h3>Your turn</h3><ul><li>Collect gold from <b>towns, farms and mines</b>, minus army upkeep.</li><li>Recruit and build in any order. Buildings, like recruits, take a turn: paid now, finished at the start of your next turn (you can cancel them until then).</li><li>Give each army one march. Press <b>End turn</b> when done.</li></ul></section>
-        <section><h3>Marching and conquest</h3><ul><li>Click a banner, choose who marches, then <b>paint tiles</b> on the map. Any shape works. Paint onto another of your armies (or your town) to join it there.</li><li>Recruits and warships take a turn to train: paid now, they appear in their town at the start of your next turn, ready to move. Until then you can cancel them in the town's panel for a full refund.</li><li>A force seizes up to <b>1 + soldiers/2</b> tiles (knights count double, max ${RULES.capMax}).</li><li>Each army has ${RULES.baseMP} steps a turn (knights alone ${RULES.cavalryMP}) and may split them over several marches. Forest, hills and rivers cost 2 outside your land; your own roads always cost 1. The land it may seize is a budget for the whole turn too.</li><li><b>Zones of control:</b> every town, castle and outpost not yours controls the 6 tiles around it (armies hold only their own tile). An army that steps onto one of those tiles may only attack the town or outpost, or turn back the way it came: it cannot cut across or end its march there. Land taken inside an enemy zone goes back to its owner when your turn ends, unless one of your armies stands on it. Painting the enemy is how you attack. Your own land is never controlled.</li><li>Winning a battle costs extra steps: 1 for a rout, up to 4 for an even fight, so a big army crushing a small one can keep marching. Losing a battle ends the army's moves for the turn.</li><li>Large armies are a little slower: −1 step from 26 soldiers, −2 from 51. Joining armies keep the average of the steps each part had left.</li><li>Each march into land you don't hold uses a <b>marching order</b>: 2 + 1 per town, max ${RULES.ordersMax}.</li></ul></section>
-        <section><h3>Battles</h3><ul><li>Enemies standing in your painted land fight you, nearest first.</li><li>Strength = soldiers × unit power × terrain, walls and river modifiers × luck.</li><li>Luck is 2d6 for each side: 2 gives ×0.70, 7 gives ×1.00, 12 gives ×1.30.</li><li>The loser loses at least half its troops and flees. The winner's losses shrink as the gap widens.</li></ul></section>
+        <section><h3>Marching and conquest</h3><ul><li>Click a banner, choose who marches, then <b>paint tiles</b> on the map. Any shape works. Paint onto another of your armies (or your town) to join it there.</li><li>Recruits and warships take a turn to train: paid now, they appear in their town at the start of your next turn, ready to move. Until then you can cancel them in the town's panel for a full refund.</li><li>A force seizes up to <b>1 + soldiers/2</b> tiles (knights count double, max ${RULES.capMax}).</li><li>Each army has ${RULES.baseMP} steps a turn (knights alone ${RULES.cavalryMP}) and may split them over several marches. Forest, hills and rivers cost 2 outside your land; your own roads always cost 1. The land it may seize is a budget for the whole turn too.</li><li><b>Zones of control:</b> every town, castle and outpost not yours controls the 6 tiles around it (armies hold only their own tile). An army that steps onto one of those tiles may only attack the town or outpost, or turn back the way it came: it cannot cut across or end its march there. Land taken inside an enemy zone goes back to its owner when your turn ends, unless one of your armies stands on it. Painting the enemy is how you attack. Your own land is never controlled.</li><li>Winning a battle costs extra steps: none for a rout, up to ${RULES.fatigueMax} for an even fight, so a big army crushing a small one can keep marching. Losing a battle ends the army's moves for the turn.</li><li>A march that storms a town or castle ends inside it. Large armies are a little slower: −1 step above ${RULES.sizeSlowEvery} soldiers, and cannons slow an army by 1. Joining armies keep the average of the steps each part had left.</li><li>Each march into land you don't hold uses a <b>marching order</b>: 2 + 1 per town, max ${RULES.ordersMax}.</li></ul></section>
+        <section><h3>Battles</h3><ul><li>Enemies standing in your painted land fight you, nearest first.</li><li>Strength = soldiers × unit power × terrain, walls and river modifiers × luck.</li><li>Luck is 2d6 for each side: 2 gives ×0.70, 7 gives ×1.00, 12 gives ×1.30. At sea luck swings wider (×0.45 to ×1.55), so a smaller fleet can still win.</li><li>The loser loses at least half its troops and flees. The winner's losses shrink as the gap widens.</li></ul></section>
         <section><h3>Units</h3><ul>${UN.map((d) => `<li><b>${d.name}</b> ${d.cost}g · att ${d.att} · def ${d.def}. ${esc(d.desc)}</li>`).join('')}<li>Upkeep each turn: ${UN.map((d) => `${d.name.toLowerCase()} ${d.upkeep}`).join(', ')}.</li></ul></section>
-        <section><h3>Sea and trade</h3><ul><li>A town with a <b>Harbor</b> launches <b>warships</b> (${RULES.shipCost}g, ${RULES.shipUpkeep} a turn). Click a fleet, then a sea tile to sail up to ${RULES.fleetMP} tiles, faster than anything on land; fleets of up to ${RULES.riverShips} ships can also sail up rivers. Choose how many ships sail in the fleet's panel to split it; sail onto your own ships to join them again. Sail onto an enemy fleet to fight, or onto enemy soldiers at sea to sink them.</li><li>Once a turn a fleet can <b>bombard</b> an enemy army on the shore next to it: each ship kills a soldier on ${RULES.bombardHit}+ with 2d6 (${RULES.bombardWallHit}+ behind walls), and they cannot shoot back.</li><li><b>Trading posts</b> sit far out at sea (on the Known World, eighteen along the coasts of the distant lands, worth 11 to 20 gold a turn: the Americas, Africa, Arabia, India and Cathay, reached only by sea; no army crosses the deserts or the Urals that border them). Keep a warship on one to earn its gold every turn. The faint dotted <b>sea lanes</b> are the trade routes: the gold sails home along them, then to your nearest harbor, and the route lights up in your colour.</li><li><b>Blockades:</b> park a warship on a sea lane and its panel lists the enemy trade passing through. Press <b>Block</b> to cut a house's routes there; only the houses you pick lose their income, and only while you stay. An enemy army on a caravan road cuts that road too. Peace partners cannot be blocked.</li><li><b>Trade agreements</b> (in Deal, needs peace) pay both houses every turn along a caravan or sea route between your towns. Every market level you own adds +${RULES.marketTrade} gold to each of your agreements (up to +${RULES.marketTradeMax} each).</li></ul></section>
-        <section><h3>Land and economy</h3><ul><li>One <b>farm</b> per ${RULES.tilesPerFarm} tiles you hold, on plains or rivers: +${RULES.farmIncome} gold (+${RULES.riverFarmBonus} by a river).</li><li><b>Mines</b> on gold deposits: +${RULES.mineIncome} gold.</li><li>Captured farms and mines change hands. Post soldiers on them to defend them (×${RULES.structureDef} palisade).</li></ul></section>
+        <section><h3>Sea and trade</h3><ul><li>A town with a <b>Harbor</b> launches <b>warships</b> (${RULES.shipCost}g, ${RULES.shipUpkeep} a turn) and <b>merchant ships</b> (${RULES.merchantCost}g, ${RULES.merchantUpkeep} a turn). Merchant ships fight at half a warship's strength, carry no guns and cannot blockade, but they earn the full gold of a trading post; warships there earn half. Click a fleet, then a sea tile to sail up to ${RULES.fleetMP} tiles, faster than anything on land; fleets of up to ${RULES.riverShips} ships can also sail up rivers. Choose how many ships sail in the fleet's panel to split it; sail onto your own ships to join them again. Sail onto an enemy fleet to fight, or onto enemy soldiers at sea to sink them.</li><li>Once a turn a fleet can <b>bombard</b> an enemy army on the shore next to it: each ship kills a soldier on ${RULES.bombardHit}+ with 2d6 (${RULES.bombardWallHit}+ behind walls), and they cannot shoot back.</li><li><b>Trading posts</b> sit far out at sea (on the Known World, eighteen along the coasts of the distant lands, worth 11 to 20 gold a turn: the Americas, Africa, Arabia, India and Cathay, reached only by sea; no army crosses the deserts or the Urals that border them). Keep ships on one to earn its gold every turn: newly arrived ships spend their first turn setting up trade, and the gold starts the turn after. The faint dotted <b>sea lanes</b> are the trade routes: the gold sails home along them, then to your nearest harbor, and the route lights up in your colour.</li><li><b>Blockades:</b> park a warship on a sea lane and its panel lists the enemy trade passing through. Press <b>Block</b> to cut a house's routes there; only the houses you pick lose their income, and only while you stay. An enemy army on a caravan road cuts that road too. Peace partners cannot be blocked.</li><li><b>Trade agreements</b> (in Deal, needs peace) pay both houses every turn along a caravan or sea route between your towns. Every market level you own adds +${RULES.marketTrade} gold to each of your agreements (up to +${RULES.marketTradeMax} each).</li></ul></section>
+        <section><h3>Land and economy</h3><ul><li>One <b>farm</b> per ${RULES.tilesPerFarm} tiles you hold, on plains or rivers: +${RULES.farmIncome} gold (+${RULES.riverFarmBonus} by a river).</li><li><b>Mines</b> on gold deposits: +${RULES.mineIncome} gold.</li><li>Captured farms and mines change hands. Post soldiers on them to defend them (×${RULES.structureDef} palisade).</li><li>Click your farm, mine, outpost or port to <b>pull it down</b> and build something else there (no gold back).</li></ul></section>
         <section><h3>Towns, walls and ships</h3><ul><li>Towns give gold, recruits and orders. Your capital gives ${RULES.capitalIncome}, other towns ${RULES.cityIncome}.</li><li><b>Walls</b> multiply defense up to ×${RULES.walls.mult[3]}. A captured town loses one wall level.</li><li>In a town with a <b>harbor</b>, armies can <b>board ships</b> (${RULES.embarkBase}g + ${RULES.embarkPer}g a soldier, then ${RULES.seaUpkeep}g a soldier each turn at sea). Afloat they sail ${RULES.transportMP} tiles a turn and land on any open shore, which ends their turn. They cannot fight at sea: warships that catch them drown most of them.</li><li>Build a <b>port</b> (${RULES.portCost} gold, ${RULES.portUpkeep} a turn) on any coastal tile you hold: warships are built there and armies board there, without needing a coastal town.</li><li>Found new <b>castles</b> for ${RULES.castleCost} gold on your land, ${RULES.castleMinDist}+ tiles from any town.</li><li><b>Outposts</b> (${RULES.outpostCost} gold, ${RULES.outpostUpkeep} a turn) control the 6 tiles around them. ${RULES.outpostMilitia} militia defend them, soldiers posted there fight ×${RULES.outpostDef}, and a captured outpost is burned.</li><li>A house that loses every town is out.</li></ul></section>
         <section><h3>Diplomacy</h3><ul><li>Press <b>Deal</b> next to a house in the Diplomacy tab to offer gold now, gold every turn for ${RULES.tributeTurns} turns (tribute), and peace.</li><li><b>Peace</b> lasts ${RULES.peaceRounds} rounds and cannot be broken: neither side may march into the other's land, and their zones stop hindering each other.</li><li>Computer houses answer at once; people answer at the start of their turn. Unanswered offers lapse after a round.</li></ul></section>
-        <section><h3>Controls</h3><ul><li>Drag: paint, or pan when nothing is selected. Right-drag erases. Shift-click sets where the army stops. Right-click inspects.</li><li>With an army selected, clicking another of your armies selects that one instead; to join them, Alt-click it or paint the path onto it.</li><li>Touch screens: long-press to inspect.</li><li>Scroll or two fingers to pan. Pinch, ctrl+scroll or the +/− buttons to zoom.</li><li><b>N</b> next army · <b>Enter</b> march · <b>Esc</b> clear · <b>E</b> end turn</li></ul></section>
+        <section><h3>Controls</h3><ul><li>Drag: paint, or pan when nothing is selected. Right-drag erases. Shift-click sets where the army stops.</li><li><b>Right-click</b> with an army or fleet selected: go there at once. The army paints its way there and marches; a fleet sails, attacks or joins the ships there. With nothing selected, right-click inspects.</li><li>With an army selected, clicking another of your armies selects that one instead; to join them, right-click it, Alt-click it or paint the path onto it.</li><li>Touch screens: long-press to inspect.</li><li>Scroll or two fingers to pan. Pinch, ctrl+scroll or the +/− buttons to zoom.</li><li><b>N</b> next army · <b>Enter</b> march · <b>Esc</b> clear · <b>E</b> end turn</li></ul></section>
       </div><div class="modal-actions"><button class="btn primary" type="button" data-close>Back to the map</button></div>`, { wide: true });
   }
 

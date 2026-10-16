@@ -211,9 +211,8 @@
       if (posts.length) {
         const coastal = towns.find((c) => c.harbor) || towns.find((c) => CC.isCoastal(st, c.tile));
         if (coastal && !coastal.harbor && st.round >= 3 && P.gold >= RULES.harborCost + 5) CC.upgrade(st, me, coastal.id, 'harbor');
-        let ships = 0;
-        for (const f of st.fleets) if (f.owner === me) ships += f.n;
-        if (coastal && coastal.harbor && ships < Math.min(4, posts.length + 1) && P.gold >= RULES.shipCost + 5) CC.recruitShips(st, me, coastal.id, 1);
+        const kind = nextShip(st, me);
+        if (coastal && coastal.harbor && kind && P.gold >= CC.shipCostOf(kind) + 5) CC.recruitShips(st, me, coastal.id, 1, kind);
       }
       if (capTown && !towns.some((c) => c.stables)) {
         const sInfo = CC.upgradeInfo(st, me, capTown.id, 'stables');
@@ -290,9 +289,18 @@
     const coastal = towns.find((c) => c.harbor) || towns.find((c) => CC.isCoastal(st, c.tile));
     if (!coastal) return 0;
     if (!coastal.harbor) return RULES.harborCost;
-    let ships = 0;
-    for (const f of st.fleets) if (f.owner === me) ships += f.n;
-    return ships < Math.min(4, posts.length + 1) ? RULES.shipCost : 0;
+    const kind = nextShip(st, me);
+    return kind ? CC.shipCostOf(kind) : 0;
+  }
+  // the next ship to build while there are trading posts: a warship or two to guard, merchant ships to trade
+  function nextShip(st, me) {
+    const posts = st._posts || [];
+    let war = 0, merchants = 0;
+    for (const f of st.fleets) if (f.owner === me) { if (CC.isMerchant(f)) merchants += f.n; else war += f.n; }
+    if (war + merchants >= Math.min(5, posts.length + 1)) return null;
+    if (war < 1) return 'war';
+    if (merchants < Math.min(3, posts.length)) return 'merchant';
+    return war < 2 ? 'war' : null;
   }
 
   function recruitAll(st, me) {
@@ -581,12 +589,12 @@
       // an enemy fleet we can beat
       for (const g of st.fleets) {
         if (g.owner === me || !(reach.dist[g.tile] > 0) || !CC.atWar(st, me, g.owner)) continue;
-        if (CC.navalOdds(f.n, g.n).p >= 0.65) { dest = g.tile; break; }
+        if (CC.navalOdds(CC.shipPow(f), CC.shipPow(g)).p >= (CC.isMerchant(f) ? 0.85 : 0.65)) { dest = g.tile; break; }
       }
       // soldiers caught at sea
       if (dest < 0) for (const a of st.armies) {
         if (!a.sea || a.owner === me || !(reach.dist[a.tile] > 0) || !CC.atWar(st, me, a.owner)) continue;
-        if (CC.transportOdds(f.n, a.u).p >= 0.6) { dest = a.tile; break; }
+        if (CC.transportOdds(CC.shipPow(f), a.u).p >= 0.6) { dest = a.tile; break; }
       }
       // otherwise the nearest free market, or the water closest to it
       const posts = (st._posts || []).filter((p) => !CC.fleetAt(st, p.tile) && p.tile !== f.tile);
@@ -600,7 +608,7 @@
         }
       }
       // the computer cuts the trade of every house it is at war with
-      f.block = st.players.filter((P) => P.alive && P.id !== me && CC.atWar(st, me, P.id)).map((P) => P.id);
+      if (!CC.isMerchant(f)) f.block = st.players.filter((P) => P.alive && P.id !== me && CC.atWar(st, me, P.id)).map((P) => P.id);
       if (dest < 0) continue;
       const rep = CC.moveFleet(st, f.id, dest);
       if (rep.error) continue;

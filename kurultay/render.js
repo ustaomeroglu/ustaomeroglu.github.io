@@ -762,11 +762,18 @@
     g.beginPath(); g.moveTo(-w / 2, 0); g.lineTo(w / 2, 0); g.lineTo(w / 2 - S * 0.14, h); g.lineTo(-w / 2 + S * 0.14, h); g.closePath();
     g.fillStyle = '#5a3d22'; g.fill(); g.shadowBlur = 0; g.lineWidth = opts.selected ? 2.6 : 1.4; g.strokeStyle = opts.selected ? '#fff6dc' : PAL.ink; g.stroke();
     g.fillStyle = PAL.ink;
-    for (let k = -1; k <= 1; k++) g.fillRect(k * S * 0.2 - S * 0.035, h * 0.28, S * 0.07, S * 0.06);
+    // warships show gun ports; merchant ships carry no guns but a cargo of gold
+    if (!opts.merchant) for (let k = -1; k <= 1; k++) g.fillRect(k * S * 0.2 - S * 0.035, h * 0.28, S * 0.07, S * 0.06);
     // mast and sail in the owner's colour
     g.beginPath(); g.moveTo(0, 0); g.lineTo(0, -S * 0.62); g.lineWidth = 1.6; g.strokeStyle = PAL.ink; g.stroke();
     g.beginPath(); g.moveTo(1, -S * 0.58); g.quadraticCurveTo(S * 0.38, -S * 0.32, 1, -S * 0.06); g.closePath();
-    g.fillStyle = color; g.fill(); g.lineWidth = 1.2; g.stroke();
+    g.fillStyle = opts.merchant ? '#efe4c8' : color; g.fill(); g.lineWidth = 1.2; g.stroke();
+    if (opts.merchant) {
+      g.beginPath(); g.moveTo(1, -S * 0.4); g.quadraticCurveTo(S * 0.3, -S * 0.32, 1, -S * 0.24); g.closePath(); g.fillStyle = color; g.fill();
+      g.beginPath(); g.moveTo(0, -S * 0.62); g.lineTo(-S * 0.2, -S * 0.56); g.lineTo(0, -S * 0.5); g.closePath(); g.fillStyle = color; g.fill(); g.lineWidth = 1; g.stroke();
+      g.beginPath(); g.arc(-S * 0.3, -S * 0.04, S * 0.09, 0, Math.PI * 2); g.fillStyle = PAL.gold; g.fill(); g.lineWidth = 1; g.strokeStyle = PAL.goldDark; g.stroke();
+      g.strokeStyle = PAL.ink;
+    }
     g.beginPath(); g.moveTo(-1, -S * 0.5); g.quadraticCurveTo(-S * 0.26, -S * 0.3, -1, -S * 0.1); g.closePath();
     g.fillStyle = '#efe4c8'; g.fill(); g.stroke();
     // count
@@ -1076,7 +1083,7 @@
         const y = an.pts[j - 1].y + (an.pts[j].y - an.pts[j - 1].y) * f;
         const bob = Math.abs(Math.sin(k * Math.PI * 7)) * 3;
         if (!an.look && !Array.isArray(an.n)) { g.fillStyle = 'rgba(0,0,0,0.28)'; g.beginPath(); g.ellipse(x, y + S * 0.28, S * 0.32, S * 0.1, 0, 0, Math.PI * 2); g.fill(); }
-        if (an.look === 'ship') drawShip(g, x, y + S * 0.1, S, an.color, an.n, {});
+        if (an.look === 'ship') drawShip(g, x, y + S * 0.1, S, an.color, an.n, { merchant: an.merchant });
         else if (an.look === 'transport') drawTransport(g, x, y + S * 0.12, S, an.color, CC.sum(an.n), {});
         else {
           const ow = st.players.findIndex((pl) => CC.colorOf(st, pl.id) === an.color), flag = ow >= 0 ? this.flagFor(ow) : null;
@@ -1096,7 +1103,7 @@
       if (p.x < x0 || p.x > x1 || p.y < y0 || p.y > y1) continue;
       const mine = ov.readyOwner === f.owner;
       const left = mine ? CC.fleetMovesLeft(f) : 0;
-      const r = drawShip(g, p.x, p.y + S * 0.1, S, CC.colorOf(st, f.owner), f.n, { ready: mine && (left > 0 || !f.fired), selected: ov.selFleet === f.id, dim: mine && left <= 0 && f.fired });
+      const r = drawShip(g, p.x, p.y + S * 0.1, S, CC.colorOf(st, f.owner), f.n, { ready: mine && (left > 0 || (!f.fired && !CC.isMerchant(f))), selected: ov.selFleet === f.id, dim: mine && left <= 0 && (f.fired || CC.isMerchant(f)), merchant: CC.isMerchant(f) });
       this.banners.push({ id: f.id, fleet: true, ...r, x: r.x + ox });
     }
     // hover and selection outlines

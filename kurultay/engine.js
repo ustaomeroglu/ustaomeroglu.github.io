@@ -51,8 +51,8 @@
     baseMP: 5, cavalryMP: 7, navalCost: 3, navalRange: 14, navalHop: false,
     zocArmy: 0, zocTown: 1,  // armies hold only their own tile; towns, castles and outposts the 6 around them
     peaceRounds: 5, tributeTurns: 5, tributeMax: 40,
-    sizeSlowEvery: 25, sizeSlowMax: 2,   // -1 step per 25 soldiers beyond the first 25, at most -2
-    fatigueMin: 1, fatigueMax: 4,        // steps a won battle costs: 1 for a rout, 4 for an even fight
+    sizeSlowEvery: 40, sizeSlowMax: 1,   // -1 step for an army of more than 40 soldiers
+    fatigueMin: 0, fatigueMax: 2,        // steps a won battle costs: none for a rout, 2 for an even fight
     capBase: 1, capPer: 2, capMax: 16,
     ordersBase: 2, ordersMax: 6,
     score: { tile: 1, farm: 3, mine: 5, city: 12 },
@@ -1321,7 +1321,7 @@
   // steps a won battle costs: the closer the fight (defender vs attacker strength), the more tiring
   function fatigue(A, D) {
     const q = A > 0 ? Math.min(1, D / A) : 1;
-    return Math.max(RULES.fatigueMin, Math.min(RULES.fatigueMax, Math.round(1 + 3 * q)));
+    return Math.max(RULES.fatigueMin, Math.min(RULES.fatigueMax, Math.round(RULES.fatigueMax * q)));
   }
 
   function keepOne(u) {
@@ -1391,6 +1391,9 @@
     // a march may claim tiles inside an enemy zone but must come back out the way it entered
     const zone = zocTiles(st, me, set);
     let destMoved = false;
+    // a march that storms a town or castle moves into it instead of turning back
+    const town = zone.has(dest) ? region.slice().reverse().find((i) => st.tiles[i].b === 'city' && st.tiles[i].owner !== me && dj.dist[i] <= left) : undefined;
+    if (town != null) dest = town;
     for (let guard = 0; zone.has(dest) && dest !== army.tile && guard < 50; guard++) {
       const back = dj.prev[dest];
       if (back < 0) { dest = army.tile; break; }
@@ -1580,14 +1583,14 @@
     for (const a of st.armies) if (a.owner === p && a.sea) atSea += sum(a.u);
     const seaUpkeep = Math.ceil(atSea * RULES.seaUpkeep);
     upkeep = troops + outposts * RULES.outpostUpkeep + ports * RULES.portUpkeep + seaUpkeep;
-    let ships = 0;
-    for (const f of st.fleets || []) if (f.owner === p) ships += f.n;
-    const shipUpkeep = ships * RULES.shipUpkeep;
+    let ships = 0, merchants = 0;
+    for (const f of st.fleets || []) if (f.owner === p) { if (isMerchant(f)) merchants += f.n; else ships += f.n; }
+    const shipUpkeep = ships * RULES.shipUpkeep + merchants * RULES.merchantUpkeep;
     upkeep += shipUpkeep;
     const routes = tradeRoutes(st, p);
     const trade = routes.reduce((n, r) => n + (r.ok ? r.value : 0), 0);
     const gross = cities + farms + mines + trade;
-    return { cities, farms, mines, trade, routes, gross, upkeep, troops, outposts, outpostUpkeep: outposts * RULES.outpostUpkeep, ports, portUpkeep: ports * RULES.portUpkeep, atSea, seaUpkeep, ships, shipUpkeep, net: gross - upkeep };
+    return { cities, farms, mines, trade, routes, gross, upkeep, troops, outposts, outpostUpkeep: outposts * RULES.outpostUpkeep, ports, portUpkeep: ports * RULES.portUpkeep, atSea, seaUpkeep, ships, merchants, shipUpkeep, net: gross - upkeep };
   }
 
   function farmSlots(st, p) {
@@ -1605,6 +1608,26 @@
     const b = Object.assign({ id: st.nextId++, left: RULES.buildTurns }, entry);
     st.builds.push(b);
     return b;
+  }
+  // pull down a farm, mine, outpost or port on your own land, to build something else there (no gold back)
+  const DISMANTLE = { farm: 'a farm', mine: 'a gold mine', tower: 'an outpost', port: 'a port' };
+  function canDismantle(st, p, i) {
+    const t = st.tiles[i];
+    if (st.cur !== p) return { ok: false, reason: 'Wait for your turn.' };
+    if (t.owner !== p) return { ok: false, reason: 'Not your land.' };
+    if (!DISMANTLE[t.b]) return { ok: false, reason: 'Nothing here can be pulled down.' };
+    const d = t.b === 'port' && st.ports && st.ports[i];
+    if (d && (d.train || []).some((e) => e.ships || e.merchants)) return { ok: false, reason: 'Ships are being built here. Cancel them first.' };
+    return { ok: true };
+  }
+  function dismantle(st, p, i) {
+    const r = canDismantle(st, p, i);
+    if (!r.ok) return r;
+    const t = st.tiles[i], was = t.b;
+    if (was === 'port' && st.ports) delete st.ports[i];
+    t.b = null;
+    log(st, `${nameOf(st, p)} pulled down ${DISMANTLE[was]} at ${placeName(st, i)}.`, 'build', [p]);
+    return { ok: true, was };
   }
   function cancelBuild(st, p, id) {
     const b = (st.builds || []).find((x) => x.id === id);
@@ -1739,8 +1762,9 @@
   }
   function training(c) {
     const u = Z(); let ships = 0;
-    for (const e of c.train || []) { e.u.forEach((n, k) => { u[k] += n; }); ships += e.ships || 0; }
-    return { u, ships, soonest: (c.train || []).reduce((m, e) => Math.min(m, e.left), Infinity) };
+    let merchants = 0;
+    for (const e of c.train || []) { e.u.forEach((n, k) => { u[k] += n; }); ships += e.ships || 0; merchants += e.merchants || 0; }
+    return { u, ships, merchants, soonest: (c.train || []).reduce((m, e) => Math.min(m, e.left), Infinity) };
   }
   // call off recruits still in training (unit index k, or 'ships'): the gold comes back in full
   function cancelTraining(st, p, cityId, k, n) {
@@ -1751,20 +1775,21 @@
     // newest orders first
     for (const e of (c.train || []).slice().reverse()) {
       if (left <= 0) break;
-      const have = k === 'ships' ? e.ships || 0 : e.u[k] || 0;
+      const boat = k === 'ships' || k === 'merchants';
+      const have = boat ? e[k] || 0 : e.u[k] || 0;
       const take = Math.min(have, left);
       if (!take) continue;
-      if (k === 'ships') e.ships -= take; else e.u[k] -= take;
-      if (e.left === RULES.trainTurns) { if (k === 'ships') c.ships = Math.max(0, (c.ships || 0) - take); else c.recruited = Math.max(0, c.recruited - take); }
+      if (boat) e[k] -= take; else e.u[k] -= take;
+      if (e.left === RULES.trainTurns) { if (boat) c.ships = Math.max(0, (c.ships || 0) - take); else c.recruited = Math.max(0, c.recruited - take); }
       left -= take; done += take;
     }
-    c.train = (c.train || []).filter((e) => sum(e.u) || e.ships);
+    c.train = (c.train || []).filter((e) => sum(e.u) || e.ships || e.merchants);
     if (!done) return { ok: false, reason: 'Nothing of that kind is in training here.' };
-    const refund = done * (k === 'ships' ? RULES.shipCost : UNITS[k].cost);
+    const refund = done * (k === 'ships' ? RULES.shipCost : k === 'merchants' ? RULES.merchantCost : UNITS[k].cost);
     st.players[p].gold += refund;
     return { ok: true, n: done, refund };
   }
-  function trainingOf(st, p) { let n = 0; for (const c of st.cities) if (c.owner === p) { const t = training(c); n += sum(t.u) + t.ships; } return n; }
+  function trainingOf(st, p) { let n = 0; for (const c of st.cities) if (c.owner === p) { const t = training(c); n += sum(t.u) + t.ships + t.merchants; } return n; }
   // at the start of the owner's turn, finished recruits step out ready to march
   function finishTraining(st, p) {
     for (const k of Object.keys(st.ports || {})) {
@@ -1776,9 +1801,15 @@
       for (const e of d.train || []) {
         e.left--;
         if (e.left > 0) { keep.push(e); continue; }
-        const berth = shipBerth(st, i, p);
-        if (berth == null) { e.left = 0; keep.push(e); continue; }
-        if (e.ships) placeFleet(st, p, berth, e.ships, 0);
+        let wait = false;
+        for (const kind of ['war', 'merchant']) {
+          const n = e[trainKey(kind)] || 0;
+          if (!n) continue;
+          const berth = shipBerth(st, i, p, kind);
+          if (berth == null) { wait = true; continue; }
+          placeFleet(st, p, berth, n, 0, kind); e[trainKey(kind)] = 0;
+        }
+        if (wait) { e.left = 0; keep.push(e); }
       }
       d.train = keep;
     }
@@ -1789,11 +1820,15 @@
         e.left--;
         if (e.left > 0) { keep.push(e); continue; }
         if (sum(e.u)) placeArmy(st, p, c.tile, normU(e.u));
-        if (e.ships) {
-          const berth = shipBerth(st, c.tile, p);
-          if (berth == null) { e.left = 0; e.u = Z(); keep.push(e); log(st, `Enemy ships blockade ${c.name}: its new warships wait in port.`, 'warn', [p]); continue; }
-          placeFleet(st, p, berth, e.ships, 0);
+        let wait = false;
+        for (const kind of ['war', 'merchant']) {
+          const n = e[trainKey(kind)] || 0;
+          if (!n) continue;
+          const berth = shipBerth(st, c.tile, p, kind);
+          if (berth == null) { wait = true; continue; }
+          placeFleet(st, p, berth, n, 0, kind); e[trainKey(kind)] = 0;
         }
+        if (wait) { e.left = 0; e.u = Z(); keep.push(e); log(st, `Enemy ships blockade ${c.name}: its new ships wait in port.`, 'warn', [p]); }
       }
       c.train = keep;
     }
@@ -1811,7 +1846,7 @@
     P.orders = ordersPerTurn(st, p);
     for (const c of st.cities) if (c.owner === p) c.recruited = 0;
     for (const a of st.armies) if (a.owner === p) { a.used = 0; a.took = 0; delete a.landed; }
-    for (const f of st.fleets || []) if (f.owner === p) { f.used = 0; f.fired = false; }
+    for (const f of st.fleets || []) if (f.owner === p) { f.used = 0; f.fired = false; f.stay = stayOf(f) + 1; }
     for (const c of st.cities) if (c.owner === p) c.ships = 0;
     finishTraining(st, p);
     finishBuilds(st, p);
@@ -1832,10 +1867,17 @@
   }
 
   // ---------------------------------------------------------------- the sea: fleets, naval battles, bombardment
-  Object.assign(RULES, { buildTurns: 1, seaUpkeep: 0.5, portCost: 140, portUpkeep: 1, riverShips: 3, trainTurns: 1, shipCost: 50, shipUpkeep: 2, shipAtt: 2, shipDef: 2, fleetMP: 9, shipsPerTurn: 2,
+  Object.assign(RULES, { buildTurns: 1, seaUpkeep: 0.5, portCost: 140, portUpkeep: 1, riverShips: 3, trainTurns: 1, shipCost: 50, shipUpkeep: 2, shipAtt: 2, shipDef: 2, merchantCost: 40, merchantUpkeep: 1, merchantPow: 0.5, postSetup: 1, fleetMP: 9, shipsPerTurn: 2,
     // armies aboard ships: board at an own harbor for gold, sail fast, but are nearly helpless against warships
     transportMP: 8, embarkBase: 5, embarkPer: 1, transportDef: 0.06, transportLoss: 0.6, bombardHit: 7, bombardWallHit: 9 });
   const fleetAt = (st, tile) => (st.fleets || []).find((f) => f.tile === tile) || null;
+  // merchant ships: half a warship's strength, no guns, no blockades, but they earn a trading post's full gold
+  const isMerchant = (f) => !!f && f.kind === 'merchant';
+  const shipPow = (f, n) => (n == null ? f.n : n) * (isMerchant(f) ? RULES.merchantPow : 1);
+  const shipCostOf = (kind) => (kind === 'merchant' ? RULES.merchantCost : RULES.shipCost);
+  const trainKey = (kind) => (kind === 'merchant' ? 'merchants' : 'ships');
+  // turns a fleet has lain at its post (fleets from older saves count as settled)
+  const stayOf = (f) => (f.stay == null ? RULES.postSetup + 1 : f.stay);
   const getFleet = (st, id) => (st.fleets || []).find((f) => f.id === id) || null;
   const isWater = (st, i) => st.tiles[i].t === 'water';
   // small fleets (up to RULES.riverShips warships) can also sail up rivers, past anything but foreign towns and troops
@@ -1850,38 +1892,45 @@
   const vesselAt = (st, tile) => fleetAt(st, tile) || seaArmyAt(st, tile);
   const atWar = (st, a, b) => a !== b && !(a >= 0 && b >= 0 && atPeace(st, a, b));
 
-  function placeFleet(st, owner, tile, n, used) {
+  function placeFleet(st, owner, tile, n, used, kind) {
     const ex = fleetAt(st, tile);
-    if (ex) { ex.n += n; ex.used = Math.max(ex.used || 0, used || 0); return ex; }
-    const f = { id: st.nextId++, owner, tile, n, used: used || 0, fired: false };
+    if (ex && ex.owner === owner && isMerchant(ex) === (kind === 'merchant')) { ex.n += n; ex.used = Math.max(ex.used || 0, used || 0); return ex; }
+    const f = { id: st.nextId++, owner, tile, n, used: used || 0, fired: false, stay: 0 };
+    if (kind === 'merchant') f.kind = 'merchant';
     st.fleets.push(f);
     return f;
   }
 
-  function canRecruitShips(st, p, cityId, n) {
+  function canRecruitShips(st, p, cityId, n, kind) {
     const c = st.cities[cityId], P = st.players[p];
-    const cost = RULES.shipCost * n;
+    const cost = shipCostOf(kind) * n;
     const no = (reason) => ({ ok: false, reason, cost });
     if (!c || c.owner !== p) return no('Not your town.');
     if (st.cur !== p) return no('Wait for your turn.');
     if (!c.harbor) return no('Build a Harbor here to launch warships.');
-    if ((c.ships || 0) + n > RULES.shipsPerTurn) return no(`A harbor launches at most ${RULES.shipsPerTurn} warships a turn.`);
-    if (!shipBerth(st, c.tile, p)) return no('Enemy ships blockade this harbor.');
+    if ((c.ships || 0) + n > RULES.shipsPerTurn) return no(`A harbor launches at most ${RULES.shipsPerTurn} ships a turn.`);
+    if (shipBerth(st, c.tile, p, kind) == null) return no('Enemy ships blockade this harbor.');
     if (P.gold < cost) return no(`Needs ${cost} gold.`);
     return { ok: true, cost };
   }
   // the water tile where new ships appear: next to an own fleet if there is one, else any free water
-  function shipBerth(st, tile, p) {
+  function shipBerth(st, tile, p, kind) {
     const water = st._nb[tile].filter((j) => isWater(st, j));
-    return water.find((j) => { const f = fleetAt(st, j); return f && f.owner === p; }) ?? water.find((j) => !vesselAt(st, j)) ?? null;
+    const same = (j) => { const f = fleetAt(st, j); return f && f.owner === p && isMerchant(f) === (kind === 'merchant'); };
+    const near = water.find(same) ?? water.find((j) => !vesselAt(st, j));
+    if (near != null) return near;
+    // the water by the harbor is taken by own ships of the other kind: the next ring out, past them
+    const mine = water.filter((j) => { const f = fleetAt(st, j); return f && f.owner === p; });
+    for (const w of mine) for (const j of st._nb[w]) if (isWater(st, j) && (same(j) || !vesselAt(st, j))) return j;
+    return null;
   }
-  function recruitShips(st, p, cityId, n) {
-    const r = canRecruitShips(st, p, cityId, n);
+  function recruitShips(st, p, cityId, n, kind) {
+    const r = canRecruitShips(st, p, cityId, n, kind);
     if (!r.ok) return r;
-    const c = st.cities[cityId];
+    const c = st.cities[cityId], e = queueTraining(c), key = trainKey(kind);
     st.players[p].gold -= r.cost;
     c.ships = (c.ships || 0) + n;
-    queueTraining(c).ships += n;
+    e[key] = (e[key] || 0) + n;
     return Object.assign(r, { training: true });
   }
 
@@ -1924,14 +1973,17 @@
     if (r.dist[dest] > 0) for (let j = dest; j !== f.tile && j >= 0; j = r.prev[j]) path.unshift(j);
     const foe = fleetAt(st, dest), prey = !foe && seaArmyAt(st, dest);
     if (prey && prey.owner === f.owner) errors.push('Your own soldiers are aboard ships there.');
-    const battle = foe && foe.owner !== f.owner ? { owner: foe.owner, n: foe.n, p: navalOdds(n, foe.n).p }
-      : prey && prey.owner !== f.owner ? { owner: prey.owner, n: sum(prey.u), p: transportOdds(n, prey.u).p, transport: true } : null;
+    if (mate && mate.owner === f.owner && isMerchant(mate) !== isMerchant(f)) errors.push('Merchant ships and warships cannot share a tile.');
+    const battle = foe && foe.owner !== f.owner ? { owner: foe.owner, n: foe.n, merchant: isMerchant(foe), p: navalOdds(shipPow(f, n), shipPow(foe)).p }
+      : prey && prey.owner !== f.owner ? { owner: prey.owner, n: sum(prey.u), p: transportOdds(shipPow(f, n), prey.u).p, transport: true } : null;
     return { valid: !errors.length, errors, path, battle, dest, fleetId, n };
   }
+  // a and d in warship-equivalents (shipPow). Luck swings wider at sea than on land: wind and weather.
+  const seaLuck = (s) => 0.45 + (s - 2) * 0.11;
   function navalOdds(a, d) {
     const A = a * RULES.shipAtt, D = d * RULES.shipDef;
     let p = 0;
-    for (const x of DICE) for (const y of DICE) if (A * luck(x.s) > D * luck(y.s)) p += x.p * y.p;
+    for (const x of DICE) for (const y of DICE) if (A * seaLuck(x.s) > D * seaLuck(y.s)) p += x.p * y.p;
     return { p, A, D };
   }
   // warships against soldiers crammed into transports: the soldiers barely fight back
@@ -1955,6 +2007,7 @@
   function setBlockade(st, fleetId, target, on) {
     const f = getFleet(st, fleetId);
     if (!f || f.owner !== st.cur) return { ok: false, reason: 'It is not your turn.' };
+    if (on && isMerchant(f)) return { ok: false, reason: 'Merchant ships cannot blockade.' };
     if (on && !atWar(st, f.owner, target)) return { ok: false, reason: 'You are at peace with them.' };
     const set = new Set(f.block || []);
     if (on) set.add(target); else set.delete(target);
@@ -1967,7 +2020,7 @@
     const out = [];
     for (const P of st.players) {
       if (!P.alive || P.id === me) continue;
-      for (const r of tradeRoutes(st, P.id)) if (r.path.includes(tile)) out.push(Object.assign({ owner: P.id }, r));
+      for (const r of tradeRoutes(st, P.id)) if (!r.settling && r.path.includes(tile)) out.push(Object.assign({ owner: P.id }, r));
     }
     return out;
   }
@@ -1977,40 +2030,40 @@
     st.ports = st.ports || {};
     return (st.ports[i] = st.ports[i] || { ships: 0, train: [] });
   }
-  function canPortShips(st, p, i, n) {
-    const t = st.tiles[i], P = st.players[p], cost = RULES.shipCost * n;
+  function canPortShips(st, p, i, n, kind) {
+    const t = st.tiles[i], P = st.players[p], cost = shipCostOf(kind) * n;
     const no = (reason) => ({ ok: false, reason, cost });
     if (t.b !== 'port' || t.owner !== p) return no('Not your port.');
     if (st.cur !== p) return no('Wait for your turn.');
     const d = portOf(st, i);
-    if ((d.ships || 0) + n > RULES.shipsPerTurn) return no(`A port launches at most ${RULES.shipsPerTurn} warships a turn.`);
-    if (shipBerth(st, i, p) == null) return no('Enemy ships blockade this port.');
+    if ((d.ships || 0) + n > RULES.shipsPerTurn) return no(`A port launches at most ${RULES.shipsPerTurn} ships a turn.`);
+    if (shipBerth(st, i, p, kind) == null) return no('Enemy ships blockade this port.');
     if (P.gold < cost) return no(`Needs ${cost} gold.`);
     return { ok: true, cost };
   }
-  function portShips(st, p, i, n) {
-    const r = canPortShips(st, p, i, n);
+  function portShips(st, p, i, n, kind) {
+    const r = canPortShips(st, p, i, n, kind);
     if (!r.ok) return r;
-    const d = portOf(st, i);
+    const d = portOf(st, i), e = queueTraining(d), key = trainKey(kind);
     st.players[p].gold -= r.cost;
     d.ships = (d.ships || 0) + n;
-    queueTraining(d).ships += n;
+    e[key] = (e[key] || 0) + n;
     return Object.assign(r, { training: true });
   }
-  function cancelPortShips(st, p, i, n) {
-    const d = portOf(st, i);
+  function cancelPortShips(st, p, i, n, kind) {
+    const d = portOf(st, i), key = trainKey(kind);
     if (!d || st.tiles[i].owner !== p || st.cur !== p) return { ok: false, reason: 'Not your port.' };
     let left = n == null ? Infinity : n, done = 0;
     for (const e of d.train.slice().reverse()) {
-      const take = Math.min(e.ships || 0, left);
+      const take = Math.min(e[key] || 0, left);
       if (!take) continue;
-      e.ships -= take; left -= take; done += take;
+      e[key] -= take; left -= take; done += take;
       if (e.left === RULES.trainTurns) d.ships = Math.max(0, (d.ships || 0) - take);
     }
-    d.train = d.train.filter((e) => e.ships);
-    if (!done) return { ok: false, reason: 'No warships are being built here.' };
-    st.players[p].gold += done * RULES.shipCost;
-    return { ok: true, n: done, refund: done * RULES.shipCost };
+    d.train = d.train.filter((e) => e.ships || e.merchants);
+    if (!done) return { ok: false, reason: 'No ships of that kind are being built here.' };
+    st.players[p].gold += done * shipCostOf(kind);
+    return { ok: true, n: done, refund: done * shipCostOf(kind) };
   }
   // sail n ships of a fleet (all by default); the rest stay where they are as their own fleet
   function moveFleet(st, fleetId, dest, n) {
@@ -2020,14 +2073,15 @@
     let mover = f;
     if (plan.n < f.n) {
       f.n -= plan.n;
-      mover = { id: st.nextId++, owner: f.owner, tile: f.tile, n: plan.n, used: f.used || 0, fired: !!f.fired, block: (f.block || []).slice() };
+      mover = { id: st.nextId++, owner: f.owner, tile: f.tile, n: plan.n, used: f.used || 0, fired: !!f.fired, block: (f.block || []).slice(), stay: f.stay };
+      if (f.kind) mover.kind = f.kind;
       st.fleets.push(mover);
     }
     const rep = sailFleet(st, mover, dest, plan);
     rep.split = mover !== f;
     if (st.fleets.includes(mover)) {
       // a detachment beaten back to where it started rejoins the ships it left there
-      const mate = st.fleets.find((x) => x !== mover && x.owner === mover.owner && x.tile === mover.tile);
+      const mate = st.fleets.find((x) => x !== mover && x.owner === mover.owner && x.tile === mover.tile && isMerchant(x) === isMerchant(mover));
       if (mate) { mate.n += mover.n; mate.used = Math.max(mate.used || 0, mover.used || 0); mate.fired = mate.fired && mover.fired; st.fleets = st.fleets.filter((x) => x !== mover); rep.fleet = mate.id; }
       else rep.fleet = mover.id;
     } else { const there = fleetAt(st, rep.end); rep.fleet = there && there.owner === mover.owner ? there.id : null; }
@@ -2037,6 +2091,7 @@
     const me = f.owner, P = st.players[me];
     const rep = { me, origin: f.tile, path: plan.path, battle: null, end: dest };
     const foe = fleetAt(st, dest);
+    f.stay = 0;
     if (foe && foe.owner === me) { st.fleets = st.fleets.filter((x) => x !== f); foe.block = [...new Set((foe.block || []).concat(f.block || []))]; foe.n += f.n; foe.used = Math.max(foe.used, (f.used || 0) + plan.path.length); rep.end = dest; return rep; }
     f.used = (f.used || 0) + plan.path.length;
     const prey = !foe && seaArmyAt(st, dest);
@@ -2044,8 +2099,8 @@
       // the fleet closes in and fires; it does not take the transports' place
       const roll = () => 1 + Math.floor(rand(st) * 6);
       const ad = [roll(), roll()], dd = [roll(), roll()];
-      const o = transportOdds(f.n, prey.u), n0 = sum(prey.u), ships0 = f.n;
-      const Ae = o.A * luck(ad[0] + ad[1]), De = o.D * luck(dd[0] + dd[1]);
+      const o = transportOdds(shipPow(f), prey.u), n0 = sum(prey.u), ships0 = f.n;
+      const Ae = o.A * seaLuck(ad[0] + ad[1]), De = o.D * seaLuck(dd[0] + dd[1]);
       const win = Ae > De, lf = lossFracs(win ? Ae / De : De / Ae);
       prey.u = applyLoss(st, prey.u, win ? Math.max(RULES.transportLoss, lf.loser) : lf.winner);
       const sink = (n, frac) => (frac >= 1 ? n : n - Math.min(n, Math.floor(n * frac + rand(st))));
@@ -2069,8 +2124,8 @@
     if (foe) {
       const roll = () => 1 + Math.floor(rand(st) * 6);
       const ad = [roll(), roll()], dd = [roll(), roll()];
-      const o = navalOdds(f.n, foe.n);
-      const Ae = o.A * luck(ad[0] + ad[1]), De = o.D * luck(dd[0] + dd[1]);
+      const o = navalOdds(shipPow(f), shipPow(foe));
+      const Ae = o.A * seaLuck(ad[0] + ad[1]), De = o.D * seaLuck(dd[0] + dd[1]);
       const win = Ae > De, lf = lossFracs(win ? Ae / De : De / Ae);
       const sink = (n, frac) => (frac >= 1 ? n : n - Math.min(n, Math.floor(n * frac + rand(st))));
       const aAfter = Math.max(win ? 1 : 0, sink(f.n, win ? lf.winner : lf.loser));
@@ -2081,7 +2136,7 @@
         st.fleets = st.fleets.filter((x) => x !== foe);
         rep.battle.fate = 'sunk';
         P.stats.won++; if (st.players[foe.owner]) st.players[foe.owner].stats.lost++;
-        if (dAfter > 0) { const home = harborWaterOf(st, foe.owner); if (home != null && !fleetAt(st, home)) { placeFleet(st, foe.owner, home, dAfter, SPENT); rep.battle.fate = 'fled'; } }
+        if (dAfter > 0) { const home = harborWaterOf(st, foe.owner); if (home != null && !fleetAt(st, home)) { placeFleet(st, foe.owner, home, dAfter, SPENT, foe.kind); rep.battle.fate = 'fled'; } }
         if (rep.battle.fate === 'sunk') rep.battle.defAfter = 0;
         f.n = aAfter; f.tile = dest;
         log(st, `${P.name}'s fleet won a sea battle against ${nameOf(st, foe.owner)} (${Math.round(o.p * 100)}% odds).`, 'battle', [me, foe.owner]);
@@ -2103,7 +2158,7 @@
   // enemy armies on land next to the fleet, which its guns can reach
   function bombardTargets(st, fleetId) {
     const f = getFleet(st, fleetId);
-    if (!f || f.fired) return [];
+    if (!f || f.fired || isMerchant(f)) return [];
     const out = [];
     for (const j of st._nb[f.tile]) {
       const a = armyAt(st, j);
@@ -2295,7 +2350,7 @@
       if (i === skip) continue;
       const f = fleetAt(st, i);
       // a warship cuts only the trade its captain chose to block
-      if (f && atWar(st, p, f.owner) && (f.block || []).includes(p)) return f.owner;
+      if (f && !isMerchant(f) && atWar(st, p, f.owner) && (f.block || []).includes(p)) return f.owner;
       const a = isWater(st, i) ? null : armyAt(st, i);
       if (a && a.owner >= 0 && atWar(st, p, a.owner)) return a.owner;
     }
@@ -2312,7 +2367,8 @@
       if (!f || f.owner !== p) continue;
       const path = harborWater.size ? laneRoute(st, post.tile, harborWater) : null;
       const by = path ? blockedBy(st, p, path, post.tile) : null;
-      out.push({ kind: 'market', name: post.name, value: post.value, path: path || [post.tile], noHarbor: !path, blockedBy: by, ok: !!path && by == null, partner: null });
+      const value = isMerchant(f) ? post.value : Math.ceil(post.value / 2), settling = stayOf(f) <= RULES.postSetup;
+      out.push({ kind: 'market', name: post.name, value, full: post.value, merchant: isMerchant(f), settling, path: path || [post.tile], noHarbor: !path, blockedBy: by, ok: !!path && by == null && !settling, partner: null });
     }
     // markets help trade: every market level you own adds to each agreement you hold
     const levels = st.cities.reduce((n, c) => n + (c.owner === p ? c.market : 0), 0);
@@ -2507,7 +2563,7 @@
   Object.assign(CC, {
     UNITS, NU, Z, normU, TERRAIN, RULES, COLORS, REBEL, FLAG_W, FLAG_H, validFlag, flagPalette, flagOf, HOUSE_NAMES, SIZES, DICE,
     mulberry32, rand, hexDistW, hexDist, disk, mapDims, generateMap, tryGenerate,
-    newGame, passable, fatigue, MAP_GEN, fleetAt, getFleet, canRecruitShips, recruitShips, fleetReach, fleetMovesLeft, planFleet, moveFleet, navalOdds,
+    newGame, passable, fatigue, MAP_GEN, canDismantle, dismantle, isMerchant, shipPow, shipCostOf, stayOf, fleetAt, getFleet, canRecruitShips, recruitShips, fleetReach, fleetMovesLeft, planFleet, moveFleet, navalOdds,
     bombardTargets, bombard, sailable, canPickStart, pickStart, aiPickStart, finishBuilds, setBlockade, cancelBuild, pendingAt, pendingIn, routesThrough, harborSites, portOf, canPortShips, portShips, cancelPortShips, transportOdds, seaArmyAt, vesselAt, embarkCost, canEmbark, embark, seaReach, planSail, sailArmy, landingSpots, isWater, tradeRoutes, hasTrade, atWar, atPeace, peaceUntil, checkOffer, proposeOffer, answerOffer, describeOffer, relations, armyAt, getArmy, cityAt, isCoastal, colorOf, nameOf, armyStats, placeName, sum,
     stepCost, isHarborTile, dijkstra, reach, movesLeft, landLeft, movable, marchLeft, training, trainingOf, cancelTraining, zocSources, zocFor, zocTiles, inZoc, SPENT, defenderAt, battleCtx, powers, odds, lossFracs, luck,
     planCampaign, executeCampaign, income, farmSlots, canBuild, build, upgradeInfo, upgrade,
