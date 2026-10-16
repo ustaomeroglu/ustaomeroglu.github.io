@@ -572,13 +572,17 @@
       [[51, 12.2], [56.6, 12.2], [56.6, 22.4], [52, 22], [51.6, 20.4]],
       [[49.4, 20.6], [52.2, 20.6], [52.6, 24.6], [50.6, 26.2], [49.2, 27.6], [48.6, 27.4], [49.8, 25]],
     ]),
+    // posts pay well, since each needs a harbor and a warship kept there (2 a turn): the farther from Europe, the richer
     colonies: [
-      WORLD4.colonies[0], WORLD4.colonies[1],
-      { name: 'Arabia', posts: [['Aden', 6, 53.6, 34.6], ['Hormuz', 6, 56.2, 27.4]],
+      { name: 'The Americas', poly: WORLD4.colonies[0].poly,
+        posts: [['Newfoundland', 11, 8, 5], ['New England', 13, 7.4, 9.6], ['the Caribbean', 18, 7.4, 14.6], ['New Spain', 16, 7.2, 18.8],
+          ['Brazil', 16, 7.8, 23.4], ['Bahia', 13, 7.4, 28.2], ['the River Plate', 12, 7, 33]] },
+      { name: 'Africa', poly: WORLD4.colonies[1].poly, posts: [['Senegal', 11, 10.4, 34.6], ['the Gold Coast', 15, 22, 39.4], ['Zanzibar', 13, 52.8, 37]] },
+      { name: 'Arabia', posts: [['Aden', 13, 53.6, 34.6], ['Hormuz', 14, 56.2, 27.4]],
         poly: [[50, 26.2], [52.4, 24.4], [55.4, 25.4], [55.4, 29.4], [54.4, 33.4], [51.6, 33.8], [49.6, 28]] },
-      { name: 'India', posts: [['Gujarat', 6, 57.2, 25.4], ['Calicut', 8, 57.8, 31], ['Bengal', 6, 62.6, 22]],
+      { name: 'India', posts: [['Gujarat', 15, 57.2, 25.4], ['Calicut', 20, 57.8, 31], ['Bengal', 17, 62.6, 22]],
         poly: [[56.4, 14.4], [61.6, 14.4], [61.6, 24], [60.4, 28], [59.6, 34.4], [58.8, 34.4], [58, 28], [58, 24.4], [56.6, 22.4]] },
-      { name: 'Cathay', posts: [['Tartary', 5, 57, 0.4], ['Peking', 7, 62.6, 7], ['Canton', 8, 62.6, 12.6]],
+      { name: 'Cathay', posts: [['Tartary', 11, 57, 0.4], ['Peking', 17, 62.6, 7], ['Canton', 20, 62.6, 12.6]],
         poly: [[52.4, 1.4], [61.6, 1.4], [61.6, 14.4], [56.4, 14.4], [56.6, 12.2], [52.4, 12.4]] },
     ],
     straits: WORLD4.straits.slice(0, 4).concat([[[55.6, 24.4], [56.8, 27]]]),
@@ -586,7 +590,8 @@
     lanes: [
       ['gib', 'medW'], ['medW', 'medC'], ['medC', 'medE'], ['medE', 'levant'], ['medE', 'aegean'], ['aegean', 'pontus'],
       ['gib', 'atlS'], ['atlS', 'atlM'], ['atlM', 'atlN'], ['atlN', 'channel'], ['channel', 'baltic'], ['channel', 'arcticW'], ['arcticW', 'arcticE'],
-      ['atlN', 'Newfoundland'], ['atlM', 'the Caribbean'], ['atlS', 'Brazil'], ['atlS', 'westAf'], ['westAf', 'Senegal'], ['westAf', 'the River Plate'],
+      ['atlN', 'Newfoundland'], ['atlN', 'New England'], ['atlM', 'the Caribbean'], ['atlM', 'New Spain'], ['atlS', 'Brazil'], ['atlS', 'Bahia'], ['atlS', 'westAf'],
+      ['westAf', 'Senegal'], ['westAf', 'the River Plate'],
       ['westAf', 'capeW'], ['capeW', 'the Gold Coast'], ['capeW', 'cape'], ['cape', 'eastAf'], ['eastAf', 'Zanzibar'], ['eastAf', 'aden'], ['red', 'aden'],
       ['aden', 'Aden'], ['aden', 'indian'], ['indian', 'Hormuz'], ['Hormuz', 'Gujarat'], ['indian', 'Calicut'], ['indian', 'ceylon'], ['ceylon', 'Bengal'],
       ['arcticE', 'Tartary'], ['Tartary', 'Peking'], ['Peking', 'Canton'], ['Canton', 'pacific'], ['pacific', 'Bengal'],
@@ -875,7 +880,7 @@
         if (d > bd) { bd = d; best = c; }
       }
       if (best < 0 || (posts.length && bd < Math.min(W, H) / 3)) break;
-      posts.push({ tile: best, value: 9 + Math.floor(rng() * 5), name: MARKET_NAMES[k % MARKET_NAMES.length] });
+      posts.push({ tile: best, value: 12 + Math.floor(rng() * 6), name: MARKET_NAMES[k % MARKET_NAMES.length] });
     }
     return posts;
   }
