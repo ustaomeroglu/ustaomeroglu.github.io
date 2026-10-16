@@ -217,7 +217,7 @@
 
   // gen 1: the original maps (kept so older saves rebuild exactly); gen 2: lakes, inland seas and distant markets;
   // gen 3: more ocean and an inland sea opening onto it through a strait. kind 'world': the Known World sketch.
-  const MAP_GEN = 4;
+  const MAP_GEN = 5;
   function generateMap(np, size, seed, gen, kind) {
     for (let k = 0; k < 40; k++) {
       const s = (seed + k * 7919) >>> 0;
@@ -230,12 +230,13 @@
   function tryGenerate(np, size, seed, gen, kind) {
     gen = gen || 1;
     const world = kind === 'world';
-    SK = gen >= 4 ? WORLD4 : WORLD;
-    const hexDistW = (W_, a, b) => hexDistCore(W_, a, b, world), disk = (W_, H_, i, R) => diskCore(W_, H_, i, R, world);
+    SK = sketchOf(gen);
+    const wrap = world && gen < 5; // the Known World was a cylinder before gen 5
+    const hexDistW = (W_, a, b) => hexDistCore(W_, a, b, wrap), disk = (W_, H_, i, R) => diskCore(W_, H_, i, R, wrap);
     const rng = mulberry32(seed);
     const { W, H, mul } = world ? mapDims(np, size, gen, 'world') : mapDims(np, size, gen >= 3 ? gen : 1);
     const N = W * H;
-    const { nb6, nb } = buildNeighbors(W, H, world);
+    const { nb6, nb } = buildNeighbors(W, H, wrap);
     const n1 = makeNoise(rng), n2 = makeNoise(rng), n3 = makeNoise(rng), n4 = makeNoise(rng);
     const elev = new Float64Array(N), ridge = new Float64Array(N), wood = new Float64Array(N);
     const Hp = H * 0.866;
@@ -283,7 +284,8 @@
     [...land].sort((a, b) => elev[a] - elev[b]).forEach((i, k) => { rankE[i] = k / land.length; });
     const relief = [...land].sort((a, b) => (0.4 * rankE[b] + 0.6 * ridge[b]) - (0.4 * rankE[a] + 0.6 * ridge[a]));
     relief.forEach((i, k) => {
-      if (shape && shape.peak[i]) t[i] = rng() < 0.55 ? 'mountain' : 'hills';
+      if (shape && shape.range[i]) t[i] = 'mountain';
+      else if (shape && shape.peak[i]) t[i] = rng() < 0.55 ? 'mountain' : 'hills';
       else if (k < land.length * (world ? 0.03 : 0.07)) t[i] = 'mountain';
       else if (k < land.length * (world ? 0.16 : 0.21)) t[i] = 'hills';
     });
@@ -554,12 +556,49 @@
       ['arcticE', 'Tartary'], ['Tartary', 'Peking'], ['arcticE', 'Canton'], ['Canton', 'pacific'], ['pacific', 'Bengal'],
     ],
   });
+  // gen 5: the map no longer wraps, and Asia is one landmass as on a real map. The distant lands still cannot be
+  // entered: the Urals, the Arabian desert and the deserts of Central Asia stand between them and the playable lands.
+  const WORLD5 = Object.assign({}, WORLD4, {
+    land: WORLD4.land.concat([
+      [[50.2, 1.6], [52.6, 1.6], [52.6, 12.4], [50.6, 13]], // the Urals
+      [[51, 12.2], [56.6, 12.2], [56.6, 22.4], [52, 22], [51.6, 20.4]], // the deserts of Central Asia
+      [[49.4, 20.6], [52.2, 20.6], [52.6, 24.6], [50.6, 26.2], [49.2, 27.6], [48.6, 27.4], [49.8, 25]], // the Arabian desert
+    ]),
+    sea: WORLD4.sea.concat([
+      [[52.2, 22.2], [55.4, 22.6], [56.4, 23.6], [56.2, 24.8], [55, 25], [52.8, 24]], // Persian Gulf
+    ]),
+    ranges: [[[50.2, 1.6], [52.6, 1.6], [52.6, 12.4], [50.6, 13]]], // the Urals: mountains no army crosses
+    deserts: WORLD4.deserts.concat([
+      [[51, 12.2], [56.6, 12.2], [56.6, 22.4], [52, 22], [51.6, 20.4]],
+      [[49.4, 20.6], [52.2, 20.6], [52.6, 24.6], [50.6, 26.2], [49.2, 27.6], [48.6, 27.4], [49.8, 25]],
+    ]),
+    colonies: [
+      WORLD4.colonies[0], WORLD4.colonies[1],
+      { name: 'Arabia', posts: [['Aden', 6, 53.6, 34.6], ['Hormuz', 6, 56.2, 27.4]],
+        poly: [[50, 26.2], [52.4, 24.4], [55.4, 25.4], [55.4, 29.4], [54.4, 33.4], [51.6, 33.8], [49.6, 28]] },
+      { name: 'India', posts: [['Gujarat', 6, 57.2, 25.4], ['Calicut', 8, 57.8, 31], ['Bengal', 6, 62.6, 22]],
+        poly: [[56.4, 14.4], [61.6, 14.4], [61.6, 24], [60.4, 28], [59.6, 34.4], [58.8, 34.4], [58, 28], [58, 24.4], [56.6, 22.4]] },
+      { name: 'Cathay', posts: [['Tartary', 5, 57, 0.4], ['Peking', 7, 62.6, 7], ['Canton', 8, 62.6, 12.6]],
+        poly: [[52.4, 1.4], [61.6, 1.4], [61.6, 14.4], [56.4, 14.4], [56.6, 12.2], [52.4, 12.4]] },
+    ],
+    straits: WORLD4.straits.slice(0, 4).concat([[[55.6, 24.4], [56.8, 27]]]),
+    nodes: Object.fromEntries(Object.entries(Object.assign({}, WORLD4.nodes, { indian: [56.8, 34], ceylon: [60.8, 36.4] })).filter(([k]) => k !== 'silk')),
+    lanes: [
+      ['gib', 'medW'], ['medW', 'medC'], ['medC', 'medE'], ['medE', 'levant'], ['medE', 'aegean'], ['aegean', 'pontus'],
+      ['gib', 'atlS'], ['atlS', 'atlM'], ['atlM', 'atlN'], ['atlN', 'channel'], ['channel', 'baltic'], ['channel', 'arcticW'], ['arcticW', 'arcticE'],
+      ['atlN', 'Newfoundland'], ['atlM', 'the Caribbean'], ['atlS', 'Brazil'], ['atlS', 'westAf'], ['westAf', 'Senegal'], ['westAf', 'the River Plate'],
+      ['westAf', 'capeW'], ['capeW', 'the Gold Coast'], ['capeW', 'cape'], ['cape', 'eastAf'], ['eastAf', 'Zanzibar'], ['eastAf', 'aden'], ['red', 'aden'],
+      ['aden', 'Aden'], ['aden', 'indian'], ['indian', 'Hormuz'], ['Hormuz', 'Gujarat'], ['indian', 'Calicut'], ['indian', 'ceylon'], ['ceylon', 'Bengal'],
+      ['arcticE', 'Tartary'], ['Tartary', 'Peking'], ['Peking', 'Canton'], ['Canton', 'pacific'], ['pacific', 'Bengal'],
+    ],
+  });
+  const sketchOf = (gen) => (gen >= 5 ? WORLD5 : gen >= 4 ? WORLD4 : WORLD);
   let SK = WORLD; // the sketch in use while a map is generated
   const WORLD_SH = 40; // the sketch is 64 wide and this tall
   const worldXY = (W, H, i) => { const c = i % W, r = (i / W) | 0; return [((c + 0.5 + 0.5 * (r & 1)) / W) * 64, ((r + 0.5) / H) * WORLD_SH]; };
   // fills t with water, plains (land), 'peak' marks and colony land; returns colony index per tile (-1 elsewhere)
   function worldShape(W, H, t, rng, nb) {
-    const N = W * H, wx = makeNoise(rng), wy = makeNoise(rng), col = new Int8Array(N).fill(-1), peak = new Uint8Array(N);
+    const N = W * H, wx = makeNoise(rng), wy = makeNoise(rng), col = new Int8Array(N).fill(-1), peak = new Uint8Array(N), range = new Uint8Array(N);
     for (let i = 0; i < N; i++) {
       let [x, y] = worldXY(W, H, i);
       x += (wx(x / 2.6, y / 2.6, 3) - 0.5) * 0.9; y += (wy(x / 2.6, y / 2.6, 3) - 0.5) * 0.9;
@@ -570,6 +609,7 @@
       else if (SK.land.some((p) => inPoly(p, x, y))) {
         kind = 'plains';
         if ((SK.deserts || []).some((p) => inPoly(p, x, y))) kind = 'desert';
+        else if ((SK.ranges || []).some((p) => inPoly(p, x, y))) range[i] = 1;
         else if (SK.peaks.some((p) => inPoly(p, x, y))) peak[i] = 1;
       }
       t[i] = kind;
@@ -579,7 +619,7 @@
     const segDist = ([ax, ay], [bx, by], x, y) => { const dx = bx - ax, dy = by - ay, k = Math.max(0, Math.min(1, ((x - ax) * dx + (y - ay) * dy) / (dx * dx + dy * dy))); return Math.hypot(ax + k * dx - x, ay + k * dy - y); };
     for (let i = 0; i < N; i++) {
       const [x, y] = worldXY(W, H, i);
-      if (SK.straits.some(([a, b]) => segDist(a, b, x, y) < half)) { t[i] = 'water'; col[i] = -1; peak[i] = 0; }
+      if (SK.straits.some(([a, b]) => segDist(a, b, x, y) < half)) { t[i] = 'water'; col[i] = -1; peak[i] = 0; range[i] = 0; }
     }
     // each colonial land is one piece: stray scraps go back to the sea
     SK.colonies.forEach((_, ci) => {
@@ -587,7 +627,7 @@
       const big = cc.list.reduce((a, b) => (b.length > a.length ? b : a), []);
       for (const m of cc.list) if (m !== big) for (const i of m) { t[i] = 'water'; col[i] = -1; }
     });
-    return { col, peak };
+    return { col, peak, range };
   }
   // town names by nearest sketch place; the rest from the usual list
   function worldNames(W, H, tiles, rng) {
@@ -862,7 +902,7 @@
     defineHidden(st, '_posts', map.posts || []);
     defineHidden(st, '_regions', map.regions || []);
     defineHidden(st, '_lanes', map.lanes || []);
-    defineHidden(st, '_wrap', map.kind === 'world');
+    defineHidden(st, '_wrap', map.kind === 'world' && (map.gen || 1) < 5);
     const laneNb = new Map();
     for (const path of map.lanes || []) for (let k = 0; k < path.length; k++) {
       if (!laneNb.has(path[k])) laneNb.set(path[k], new Set());
@@ -971,7 +1011,7 @@
   }
   // on the Known World a new capital takes the nearest place name on the sketch not already in use
   function worldPlace(st, tile) {
-    const sk = (st.settings.gen || 1) >= 4 ? WORLD4 : WORLD, W = st.W, H = st.H;
+    const sk = sketchOf(st.settings.gen || 1), W = st.W, H = st.H;
     const [x, y] = worldXY(W, H, tile), used = new Set(st.cities.map((c) => c.name));
     let best = null, bd = 5;
     for (const [n, px, py] of sk.places) { if (used.has(n)) continue; const d = Math.hypot(px - x, py - y); if (d < bd) { bd = d; best = n; } }
