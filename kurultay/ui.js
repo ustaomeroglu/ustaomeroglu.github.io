@@ -9,7 +9,7 @@
   const PREF_KEY = 'banners-borders-prefs-v1';
 
   const App = {
-    st: null, R: null, online: null, sel: null, plan: null, busy: false, hover: -1,
+    st: null, R: null, online: null, sel: null, plan: null, queue: [], busy: false, hover: -1,
     endArmed: 0, timerEnd: 0, timerId: 0, token: 0, prefs: { aiSpeed: 'normal' },
   };
   CC.App = App;
@@ -58,6 +58,90 @@
   }
   const myTurn = () => !!App.st && controls(App.st.cur);
 
+  // ------------------------------------------------------------ marches queued while another house moves
+  // the house this screen plays when it is someone else's turn (online: your seat; locally: the only person)
+  function meIdx() {
+    const s = App.st;
+    if (!s) return -1;
+    if (App.online) return s.players.findIndex((p) => !p.ai && App.online.isMine(p.id));
+    const people = s.players.filter((p) => !p.ai);
+    return people.length === 1 ? people[0].id : -1;
+  }
+  function queuing() {
+    const s = App.st, me = meIdx();
+    return !!s && !s.over && s.phase !== 'pick' && me >= 0 && s.cur !== me && s.players[me].alive;
+  }
+  const planOK = () => !!App.plan && (myTurn() || (!!App.plan.queue && queuing()));
+  const planner = () => (App.plan && App.plan.queue ? App.plan.me : App.st.cur);
+  // run fn with the state as it will look when your turn begins: your armies rested, your orders renewed
+  function asMe(fn) {
+    const s = App.st, pl = App.plan;
+    if (!s || !pl || !pl.queue || s.cur === pl.me) return fn();
+    const me = pl.me, P = s.players[me];
+    const keep = { cur: s.cur, orders: P.orders, armies: s.armies.filter((a) => a.owner === me).map((a) => [a, a.used, a.took, a.landed]) };
+    s.cur = me;
+    P.orders = Math.max(0, CC.ordersPerTurn(s, me) - App.queue.filter((q) => q.me === me && q.usesOrder).length);
+    for (const [a] of keep.armies) { a.used = App.queue.some((q) => q.armyId === a.id) ? CC.SPENT : 0; a.took = 0; delete a.landed; }
+    try { return fn(); } finally {
+      s.cur = keep.cur; P.orders = keep.orders;
+      for (const [a, used, took, landed] of keep.armies) { a.used = used; a.took = took; if (landed === undefined) delete a.landed; else a.landed = landed; }
+    }
+  }
+  function queueMarch() {
+    const pl = App.plan, s = App.st, a = pl && CC.getArmy(s, pl.armyId);
+    if (!a || !pl.res) return;
+    if (!pl.res.valid) { sfx('deny'); hint(pl.res.errors[0] || 'Paint tiles on the map first.'); return; }
+    App.queue.push({ armyId: a.id, me: pl.me, tile: a.tile, before: a.u.slice(), u: pl.u.slice(), region: pl.region.slice(), dest: pl.dest, usesOrder: pl.res.newTiles > 0, fights: pl.res.battles.length });
+    sfx('click');
+    hint(`March queued. It sets off when your turn begins (${App.queue.length} waiting).`);
+    App.plan = null; App.sel = null;
+    renderAll();
+  }
+  // at the start of your turn: run each queued march in order, dropping any whose army moved, fought or changed
+  async function runQueue() {
+    const s = App.st;
+    if (!myTurn() || App.running) return;
+    const me = s.cur, list = App.queue.filter((q) => q.me === me), notes = [];
+    App.queue = App.queue.filter((q) => q.me !== me);
+    App.running = true;
+    for (let k = 0; k < list.length; k++) {
+      if (App.st !== s || !myTurn()) { notes.push(`March ${k + 1} was not carried out: the turn ended.`); continue; }
+      const q = list[k], a = CC.getArmy(s, q.armyId);
+      let why = null;
+      if (!a || a.owner !== me) why = 'the army is gone';
+      else if (a.tile !== q.tile) why = 'the army is no longer where it stood';
+      else if (a.u.some((n, j) => n < q.before[j])) why = 'the army lost soldiers in a battle';
+      else if (a.sea) why = 'the army is at sea';
+      else {
+        const r = CC.planCampaign(s, a.id, q.u, q.region, q.dest);
+        if (!r.valid) why = (r.errors[0] || 'it cannot go there now').replace(/\.$/, '');
+        else if (r.battles.length > q.fights) why = 'new enemies stand in its way';
+      }
+      if (why) { notes.push(`March ${k + 1} cancelled: ${why}.`); continue; }
+      App.sel = { kind: 'army', id: a.id };
+      App.plan = { armyId: a.id, u: q.u.slice(), region: q.region.slice(), dest: q.dest };
+      refreshPlan(true);
+      ensureVisible(a.tile);
+      await march();
+    }
+    App.running = false;
+    App.plan = null; App.sel = null;
+    renderAll();
+    if (notes.length) modal(`<h2>Queued marches</h2><ul class="summary-list">${notes.map((n) => `<li>${esc(n)}</li>`).join('')}</ul>
+      <div class="modal-actions"><button class="btn primary" type="button" data-close>Back to the map</button></div>`);
+  }
+  function queueSection() {
+    const s = App.st, me = myTurn() ? s.cur : meIdx();
+    const list = App.queue.filter((q) => q.me === me);
+    const rows = list.map((q, k) => {
+      const a = CC.getArmy(s, q.armyId);
+      return `<li class="row-act"><span><b>${k + 1}.</b> ${CC.sum(q.u)} from ${esc(CC.placeName(s, q.tile))} to ${esc(CC.placeName(s, q.dest))}${a ? '' : ' <span class="tag">gone</span>'}</span><button type="button" class="btn small ghost" data-act="unqueue" data-k="${App.queue.indexOf(q)}" aria-label="Remove this march">✕</button></li>`;
+    }).join('');
+    if (myTurn()) return list.length ? `<h3>Queued marches</h3><ul class="list">${rows}</ul><div class="actions"><button class="btn primary" type="button" data-act="run-queue" ${tip('Run them one after another. A march whose army moved, fought or changed is cancelled.')}>Carry out ${list.length} march${list.length === 1 ? '' : 'es'}</button></div>` : '';
+    if (!queuing()) return '';
+    return `<h3>Plan ahead</h3><p class="hint-text">While you wait, click one of your armies and paint its next march, then press <b>Queue march</b>. Queued marches run when your turn begins.</p>${list.length ? `<ul class="list">${rows}</ul>` : ''}`;
+  }
+
   let hintTimer = 0;
   function hint(text) {
     const el = $('#hint');
@@ -86,8 +170,10 @@
     R.ov.selTile = !App.sel ? null : App.sel.kind === 'tile' ? App.sel.i : App.sel.kind === 'city' ? s.cities[App.sel.id].tile : null;
     R.ov.hover = App.hover >= 0 ? App.hover : null;
     R.ov.coach = Coach.on ? Coach.marks : null;
-    R.ov.zoc = App.plan && myTurn() ? App.plan.zoc : null;
+    R.ov.zoc = planOK() ? App.plan.zoc : null;
+    R.ov.queued = App.queue.length ? { list: App.queue.filter((q) => q.me === (myTurn() ? s.cur : meIdx())), color: CC.colorOf(s, myTurn() ? s.cur : Math.max(0, meIdx())) } : null;
     R.ov.routes = App.routes || [];
+    R.ov.sites = s.phase === 'pick' ? s.pick.sites.filter((t) => !s.pick.taken.includes(t)).map((t) => ({ i: t, ok: CC.canPickStart(s, s.cur, t).ok, sel: myTurn() && App.pickSel === t })) : null;
     const fl = App.sel && App.sel.kind === 'fleet' ? CC.getFleet(s, App.sel.id) : null;
     R.ov.selFleet = fl ? fl.id : null;
     const myFleet = fl && fl.owner === s.cur && myTurn();
@@ -103,7 +189,7 @@
     R.ov.course = myFleet || mySea ? App.course : null; R.ov.courseOk = App.courseOk;
     if (Coach.on) placeCoach();
     if (App.plan && App.plan.res) {
-      R.ov.plan = App.plan.res; R.ov.reach = { dist: App.plan.reachDist, mp: App.plan.mp }; R.ov.planColor = CC.colorOf(s, s.cur);
+      R.ov.plan = App.plan.res; R.ov.reach = { dist: App.plan.reachDist, mp: App.plan.mp }; R.ov.planColor = CC.colorOf(s, planner());
     } else { R.ov.plan = null; R.ov.reach = null; }
     R.draw();
   }
@@ -159,6 +245,7 @@
     if (!s) { el.textContent = ''; return; }
     const p = s.players[s.cur];
     if (s.over) el.textContent = 'The game is over.';
+    else if (s.phase === 'pick') el.innerHTML = myTurn() ? 'Click a marked site to choose where your capital will stand' : `<span class="spin"></span> ${esc(p.name)} is choosing a capital site`;
     else if (App.busy) el.innerHTML = `<span class="spin"></span> ${esc(p.name)} is on the march…`;
     else if (App.online && !myTurn()) el.innerHTML = `<span class="spin"></span> Waiting for ${esc(p.name)}`;
     else if (App.plan) el.innerHTML = 'Drag to paint · right-drag or drag a painted tile to erase · <b>Shift</b>-click sets where the army stops · paint onto another of your armies to join it';
@@ -218,6 +305,7 @@
         ${inc.ships ? `<tr class="neg"><td>Warships: ${inc.ships} × ${RULES.shipUpkeep}</td><td>−${inc.shipUpkeep}</td></tr>` : ''}
         ${inc.outposts ? `<tr class="neg"><td>Outposts: ${inc.outposts} × ${RULES.outpostUpkeep}</td><td>−${inc.outpostUpkeep}</td></tr>` : ''}
         ${inc.ports ? `<tr class="neg"><td>Ports: ${inc.ports} × ${RULES.portUpkeep}</td><td>−${inc.portUpkeep}</td></tr>` : ''}
+        ${inc.atSea ? `<tr class="neg"><td>Ships for ${inc.atSea} soldiers at sea</td><td>−${inc.seaUpkeep}</td></tr>` : ''}
         <tr class="sum"><td>Next turn</td><td>${signed(inc.net)}</td></tr></table>`;
     },
     orders() {
@@ -229,7 +317,7 @@
       return `<b>${fs.farms} of ${fs.max} farms built</b><br>You may build 1 farm per ${RULES.tilesPerFarm} tiles you hold. You hold ${fs.tiles} tiles. Farms go on plains or by rivers and pay +${RULES.farmIncome} gold a turn (+${RULES.riverFarmBonus} by a river).`;
     },
     capacity() { return `A force seizes 1 tile plus 1 for every 2 soldiers (knights count double), up to ${RULES.capMax}. Tiles you already hold are free.`; },
-    range() { return `Each army walks ${RULES.baseMP} steps a turn (${RULES.cavalryMP} if only knights) and may split them over several marches. Your own land costs 1 a tile; outside it plains cost 1, forest, hills and rivers 2 or more. Large armies are slower: −1 step from 16 soldiers, −2 from 31. Winning a battle costs 1 to 4 steps (less when you heavily outnumber the enemy); losing one ends its moves for the turn. Next to an enemy town or outpost an army may only attack it or turn back.`; },
+    range() { return `Each army walks ${RULES.baseMP} steps a turn (${RULES.cavalryMP} if only knights) and may split them over several marches. Your own land costs 1 a tile; outside it plains cost 1, forest, hills and rivers 2 or more. Large armies are slower: −1 step from 26 soldiers, −2 from 51. Winning a battle costs 1 to 4 steps (less when you heavily outnumber the enemy); losing one ends its moves for the turn. Next to an enemy town or outpost an army may only attack it or turn back.`; },
   };
 
   function renderChronicle() {
@@ -245,11 +333,12 @@
     if (!s) { el.innerHTML = ''; return; }
     const sel = App.sel;
     let html;
-    if (sel && sel.kind === 'army' && CC.getArmy(s, sel.id)) html = panelArmy(CC.getArmy(s, sel.id));
+    if (sel && sel.kind === 'army' && CC.getArmy(s, sel.id)) html = asMe(() => panelArmy(CC.getArmy(s, sel.id)));
     else if (sel && sel.kind === 'fleet' && CC.getFleet(s, sel.id)) html = panelFleet(CC.getFleet(s, sel.id));
     else if (sel && sel.kind === 'city') html = panelCity(s.cities[sel.id]);
     else if (sel && sel.kind === 'tile') html = panelTile(sel.i);
     else html = panelIdle();
+    if (s.phase === 'pick' && !s.over) html = panelPick();
     el.innerHTML = html;
     coachTick();
   }
@@ -257,6 +346,33 @@
   function closeBtn() { return '<button class="btn small ghost" data-act="deselect" type="button" aria-label="Close">✕</button>'; }
   const chip = (label, value, tipAttr, cls) => `<span class="chip ${cls || ''}" ${tipAttr || ''}><small>${label}</small><b>${value}</b></span>`;
   const head = (color, title, sub, owner) => `<div class="pane-head">${owner != null && App.st && CC.flagOf(App.st, owner) ? mark(App.st, owner) : swatch(color)}<h2>${title}</h2>${closeBtn()}</div>${sub ? `<p class="sub">${sub}</p>` : ''}`;
+
+  // while houses choose where their capitals stand
+  function panelPick() {
+    const s = App.st, pk = s.pick, p = s.players[s.cur], mine = myTurn();
+    const rows = pk.order.map((h, k) => {
+      const cap = s.players[h].capital != null ? s.cities[s.players[h].capital] : null;
+      const state = cap ? `chose ${esc(CC.tr ? CC.tr(cap.name) : cap.name)}` : k === pk.idx ? 'choosing…' : 'waits';
+      return `<li class="pick-row ${k === pk.idx ? 'now' : ''}"><span>${mark(s, h)} <b>${esc(s.players[h].name)}</b></span><span class="meta">${state}</span></li>`;
+    }).join('');
+    let body;
+    if (!mine) body = `<p class="sub"><span class="spin"></span> ${esc(p.name)} is choosing where to raise a capital.</p>${App.online ? App.online.panelExtra() : ''}`;
+    else {
+      const t = App.pickSel, ok = t != null && CC.canPickStart(s, s.cur, t).ok;
+      if (!ok) body = '<p class="sub">Click one of the marked sites on the map. Your capital, its walls and a first army of 5 spearmen and 2 archers will be raised there.</p>';
+      else {
+        const land = CC.disk(s.W, s.H, t, 3, s._wrap).filter((j) => CC.passable(s, j));
+        const count = (f) => land.filter(f).length;
+        const coast = CC.isCoastal(s, t);
+        const near = s.cities.filter((c) => c.owner < 0 && CC.hexDist(s, c.tile, t) <= 6).length;
+        body = `<p class="sub"><b>${esc(CC.placeName(s, t))}</b>${coast ? ' · on the coast' : ''}</p>
+          <div class="chips">${chip('Land nearby', land.length)}${chip('Forest', count((j) => s.tiles[j].t === 'forest'))}${chip('Hills', count((j) => s.tiles[j].t === 'hills'))}${chip('Rivers', count((j) => s.tiles[j].river))}${chip('Free towns near', near)}</div>
+          <div class="actions"><button class="btn primary" type="button" data-act="pick-start">Raise your capital here</button></div>`;
+      }
+    }
+    return `<div class="pane-head">${mark(s, s.cur)}<h2>${mine ? 'Choose your capital' : 'Choosing capitals'}</h2></div>${body}
+      <h3>Order of choosing</h3><ol class="list">${rows}</ol>`;
+  }
 
   function panelIdle() {
     const s = App.st, p = s.players[s.cur];
@@ -267,7 +383,7 @@
     if (!myTurn()) {
       const why = App.busy ? 'is making their moves' : App.online ? 'is playing their turn' : 'is thinking';
       return `<div class="pane-head">${mark(s, s.cur)}<h2>${esc(p.name)}</h2><span class="tag">${p.ai ? 'CPU' : 'Their turn'}</span></div>
-        <p class="sub"><span class="spin"></span> ${esc(p.name)} ${why}…</p>${App.online ? App.online.panelExtra() : ''}`;
+        <p class="sub"><span class="spin"></span> ${esc(p.name)} ${why}…</p>${queueSection()}${App.online ? App.online.panelExtra() : ''}`;
     }
     const inc = CC.income(s, s.cur), fs = CC.farmSlots(s, s.cur);
     const armies = s.armies.filter((a) => a.owner === s.cur && canMove(a));
@@ -278,6 +394,7 @@
     return `<div class="pane-head">${mark(s, s.cur)}<h2>${esc(p.name)}</h2><span class="tag gilt">Your turn</span></div>
       <div class="chips">${chip('Gold', `${p.gold} <span class="${inc.net >= 0 ? 'pos' : 'neg'}">${signed(inc.net)}</span>`, tipFn('treasury'))}${chip('Orders', `${p.orders}/${CC.ordersPerTurn(s, s.cur)}`, tipFn('orders'))}${chip('Farms', `${fs.farms}/${fs.max}`, tipFn('farms'))}${inc.trade ? chip('Trade', `+${inc.trade}`, tipFn('treasury')) : ''}</div>
       ${offers ? `<div class="actions"><button class="btn primary" type="button" data-act="offers">${offers} offer${offers === 1 ? '' : 's'} waiting</button></div>` : ''}
+      ${queueSection()}
       <h3>Ready to move</h3>
       ${rows ? `<ul class="list">${rows}</ul>` : '<p class="hint-text">Nothing left to move. Recruit, build, or end your turn.</p>'}
       <p class="hint-text">Click to command · right-click to inspect · <kbd>N</kbd> next · <kbd>E</kbd> end turn</p>`;
@@ -309,7 +426,7 @@
     const town = CC.cityAt(s, a.tile);
     let board = '';
     const atPort = s.tiles[a.tile].b === 'port' && s.tiles[a.tile].owner === s.cur;
-    if ((town && town.owner === s.cur && CC.isCoastal(s, town.tile)) || atPort) {
+    if (!pl.queue && ((town && town.owner === s.cur && CC.isCoastal(s, town.tile)) || atPort)) {
       const e = CC.canEmbark(s, a.id, pl.u);
       board = `<button class="btn" type="button" data-act="embark" ${gate(e.ok, e.reason, `Put ${CC.sum(pl.u)} soldier${CC.sum(pl.u) === 1 ? '' : 's'} aboard ships for ${CC.embarkCost(pl.u)} gold. At sea they sail ${RULES.transportMP} tiles a turn, but warships can sink them.`)}>Board ships · ${CC.embarkCost(pl.u)}g</button>`;
     }
@@ -320,9 +437,10 @@
       ${r.battles.length ? `<ul class="list">${battles}</ul>${r.battles.length > 1 ? `<p class="hint-text">Win them all ≈ <span class="pill ${oddsClass(r.pAll)}">${pct(r.pAll)}</span></p>` : ''}` : ''}
       ${r.region.length ? `<p class="sub small">Ends at ${esc(CC.placeName(s, r.dest))}${r.destMoved ? ' (turns back out of the zone)' : ''}${r.usesSea ? ' · by ship' : ''}</p>` : '<p class="hint-text">Paint tiles on the map to march. Paint onto another of your armies to join it.</p>'}
       ${err ? `<p class="err">${esc(err)}</p>` : ''}
-      <div class="actions"><button class="btn primary" type="button" data-act="march" ${gate(r.valid, r.errors[0] || 'Paint tiles on the map first.', 'Go (Enter)')}>${r.battles.length ? 'Attack' : r.newTiles ? 'March and claim' : 'March'}</button>
+      <div class="actions"><button class="btn primary" type="button" data-act="march" ${gate(r.valid, r.errors[0] || 'Paint tiles on the map first.', pl.queue ? 'Save this march; it sets off when your turn begins (Enter)' : 'Go (Enter)')}>${pl.queue ? 'Queue march' : r.battles.length ? 'Attack' : r.newTiles ? 'March and claim' : 'March'}</button>
         <button class="btn" type="button" data-act="clear" ${gate(r.region.length, 'Nothing painted yet.', 'Erase the painted tiles (Esc)')}>Clear</button>
-        ${!CC.cityAt(s, a.tile) ? `<button class="btn" type="button" data-act="land" data-i="${a.tile}" ${tip('Build on the tile this army stands on')}>Land</button>` : ''}${board}</div>`;
+        ${!CC.cityAt(s, a.tile) && !pl.queue ? `<button class="btn" type="button" data-act="land" data-i="${a.tile}" ${tip('Build on the tile this army stands on')}>Land</button>` : ''}${board}</div>
+      ${pl.queue ? '<p class="hint-text">Planning ahead: this march is saved, not made. Steps and orders are counted as at the start of your turn.</p>' : ''}`;
   }
 
   function panelTransport(a) {
@@ -353,7 +471,21 @@
         <div class="quick"><button class="btn small" type="button" data-act="fdet-all" ${tip('Sail with the whole fleet')}>All</button><button class="btn small" type="button" data-act="fdet-half" ${tip('Send half, keep half here')}>Half</button><button class="btn small" type="button" data-act="fdet-one" ${tip('Send a single ship')}>One</button></div>`; })() : ''}
       <div class="chips">${chip('Moves', `${CC.fleetMovesLeft(f)}/${RULES.fleetMP}`)}${chip('Guns', f.fired ? 'fired' : 'ready', '', f.fired ? 'bad' : '')}${post ? chip('Market', `+${post.value}`, tip(`Holding ${post.name}. It pays while the sea route home is open.`)) : ''}</div>
       <p class="hint-text">${CC.fleetMovesLeft(f) || !f.fired ? 'Click a sea tile or river to sail · an enemy ship to attack · a red-marked army on the shore to bombard.' : 'Done for this turn.'}</p>
-      ${tlist ? `<h3>Bombard</h3><ul class="list">${tlist}</ul>` : ''}`;
+      ${tlist ? `<h3>Bombard</h3><ul class="list">${tlist}</ul>` : ''}
+      ${blockadeList(f)}`;
+  }
+  // enemy trade passing this fleet's tile: block it house by house
+  function blockadeList(f) {
+    const s = App.st, routes = CC.routesThrough(s, f.tile, f.owner);
+    if (!routes.length) return '';
+    const byHouse = new Map();
+    for (const r of routes) { const v = byHouse.get(r.owner) || { gold: 0, n: 0 }; v.gold += r.value; v.n++; byHouse.set(r.owner, v); }
+    const rows = [...byHouse].map(([q, v]) => {
+      const on = (f.block || []).includes(q), war = CC.atWar(s, f.owner, q);
+      return `<li class="row-act"><span>${mark(s, q)} ${esc(CC.nameOf(s, q))}<span class="meta"> · ${v.n} route${v.n === 1 ? '' : 's'}, ${v.gold} gold a turn</span></span>
+        <button class="btn small ${on ? '' : 'primary'}" type="button" data-act="blockade" data-p="${q}" data-on="${on ? 0 : 1}" ${gate(war || on, `You are at peace with ${CC.nameOf(s, q)}.`, on ? 'Let their trade pass again' : 'Stop their ships here: their trade on this lane pays nothing while your warship stays')}>${on ? 'Stop blocking' : 'Block'}</button></li>`;
+    }).join('');
+    return `<h3>Trade on this lane</h3><ul class="list">${rows}</ul>`;
   }
 
   function panelCity(c) {
@@ -408,6 +540,8 @@
       for (const [kind, name, desc] of ups) {
         if (kind === 'harbor' && !CC.isCoastal(s, c.tile)) continue;
         const info = CC.upgradeInfo(s, s.cur, c.id, kind);
+        const work = CC.pendingIn(s, c.id, kind);
+        if (work) { html += `<div class="buy"><div class="nm">${name} · <span class="ok">being built · ready next turn</span></div><button class="btn small" type="button" data-act="unbuild" data-id="${work.id}" ${tip(`Cancel and get ${work.cost} gold back`)}>Cancel</button></div>`; continue; }
         const done = info.max != null && info.level >= info.max;
         const lvl = kind === 'walls' || kind === 'market' ? ` ${info.level}/${info.max}` : '';
         html += `<div class="buy"><div class="nm" ${tip(done ? info.reason : desc)}>${name}${lvl}${done ? ' <span class="ok">✓</span>' : ` <span class="cost">${info.cost}g</span>`}</div>
@@ -454,6 +588,11 @@
   // what can be built on tile i
   function buildSection(i) {
     const s = App.st, t = s.tiles[i];
+    const work = CC.pendingAt(s, i);
+    if (work && work.owner === s.cur) {
+      const names = { farm: 'Farm', mine: 'Gold mine', outpost: 'Outpost', castle: 'Castle', port: 'Port' };
+      return `<h3>Being built</h3><div class="buy-list"><div class="buy"><div class="nm">${names[work.kind] || work.kind} · <span class="ok">ready next turn</span></div>${myTurn() ? `<button class="btn small" type="button" data-act="unbuild" data-id="${work.id}" ${tip(`Cancel and get ${work.cost} gold back`)}>Cancel</button>` : ''}</div></div>`;
+    }
     if (!(t.owner === s.cur && myTurn()) || t.b) return '';
     const fs = CC.farmSlots(s, s.cur);
     const opts = [
@@ -485,6 +624,9 @@
     if (!b || b.disabled) return;
     if (b.getAttribute('aria-disabled') === 'true') { denied(b); return; }
     const s = App.st, act = b.dataset.act;
+    if (act === 'pick-start') { doPickStart(); return; }
+    if (act === 'run-queue') { runQueue(); return; }
+    if (act === 'unqueue') { App.queue.splice(+b.dataset.k, 1); sfx('erase'); renderAll(); return; }
     if (act === 'deselect') select(null);
     else if (act === 'sel-army') { select({ kind: 'army', id: +b.dataset.id }); const a = CC.getArmy(s, +b.dataset.id); if (a) ensureVisible(a.tile); }
     else if (act === 'sel-fleet') { select({ kind: 'fleet', id: +b.dataset.id }); const f = CC.getFleet(s, +b.dataset.id); if (f) ensureVisible(f.tile); }
@@ -494,10 +636,10 @@
     else if (act === 'show-over') showGameOver();
     else if (act === 'new-game') showSetup();
     else if (act === 'offers') reviewOffers();
-    else if (!myTurn()) return;
+    else if (!myTurn() && !(planOK() && /^(det|det-all|det-half|det-one|march|clear)$/.test(act))) return;
     else if (act === 'det' || act === 'det-all' || act === 'det-half' || act === 'det-one') {
       const pl = App.plan, a = CC.getArmy(s, pl.armyId);
-      const mov = CC.movable(a);
+      const mov = asMe(() => CC.movable(a));
       if (act === 'det') { const k = +b.dataset.k; pl.u[k] = Math.max(0, Math.min(mov[k], pl.u[k] + +b.dataset.d)); }
       else if (act === 'det-all') pl.u = mov;
       else if (act === 'det-half') pl.u = mov.map((n) => Math.ceil(n / 2));
@@ -515,6 +657,12 @@
       tipTile = -2; renderAll();
     }
     else if (act === 'bombard') fireAt(+b.dataset.i);
+    else if (act === 'blockade') {
+      const f = App.sel && App.sel.kind === 'fleet' && CC.getFleet(s, App.sel.id);
+      if (!f) return;
+      const r = CC.setBlockade(s, f.id, +b.dataset.p, b.dataset.on === '1');
+      if (!r.ok) { sfx('deny'); hint(r.reason); } else { sfx(b.dataset.on === '1' ? 'cannon' : 'click'); commit(); hint(b.dataset.on === '1' ? `Blockade: ${CC.nameOf(s, +b.dataset.p)}'s trade through here is cut.` : 'Their trade passes again.'); }
+    }
     else if (act === 'recruit') {
       const r = CC.recruit(s, s.cur, App.sel.id, +b.dataset.k, +b.dataset.n);
       if (!r.ok) { sfx('deny'); hint(r.reason); } else { sfx('recruit'); App.R.pulse(s.cities[App.sel.id].tile, CC.colorOf(s, s.cur)); commit(); hint('In training: they join the garrison at the start of your next turn.'); }
@@ -532,7 +680,10 @@
       if (!r.ok) { sfx('deny'); hint(r.reason); } else { sfx('waves'); App.R.pulse(s.cities[App.sel.id].tile, CC.colorOf(s, s.cur)); commit(); hint('The shipwrights are at work: the warship puts to sea at the start of your next turn.'); }
     } else if (act === 'upgrade') {
       const r = CC.upgrade(s, s.cur, App.sel.id, b.dataset.kind);
-      if (!r.ok) { sfx('deny'); hint(r.reason); } else { sfx('upgrade'); App.R.pulse(s.cities[App.sel.id].tile, '#ffd77a'); commit(); }
+      if (!r.ok) { sfx('deny'); hint(r.reason); } else { sfx('upgrade'); App.R.pulse(s.cities[App.sel.id].tile, '#ffd77a'); commit(); hint('Building: ready at the start of your next turn.'); }
+    } else if (act === 'unbuild') {
+      const r = CC.cancelBuild(s, s.cur, +b.dataset.id);
+      if (!r.ok) { sfx('deny'); hint(r.reason); } else { sfx('coins', { n: 3 }); commit(); hint(`Cancelled: ${r.refund} gold back.`); }
     } else if (act === 'build') {
       const tile = b.dataset.tile != null ? +b.dataset.tile : App.sel.i;
       const r = CC.build(s, s.cur, tile, b.dataset.kind);
@@ -540,8 +691,8 @@
       else {
         sfx(b.dataset.kind === 'castle' ? 'upgrade' : 'build');
         App.R.pulse(tile, '#ffd77a');
-        if (b.dataset.kind === 'castle') App.sel = { kind: 'city', id: s.tiles[tile].city };
         commit();
+        hint('Building: ready at the start of your next turn.');
       }
     }
   }
@@ -562,12 +713,18 @@
       const a = CC.getArmy(App.st, sel.id);
       if (!a) App.sel = null;
       else if (controls(a.owner) && canMove(a) && !a.sea) { App.plan = { armyId: a.id, u: CC.movable(a), region: [], dest: a.tile }; refreshPlan(true); }
+      else if (queuing() && a.owner === meIdx() && !a.sea && !App.queue.some((q) => q.armyId === a.id)) {
+        App.plan = { armyId: a.id, u: [], region: [], dest: a.tile, queue: true, me: a.owner };
+        App.plan.u = asMe(() => CC.movable(a));
+        if (CC.sum(App.plan.u)) refreshPlan(true); else App.plan = null;
+      }
     }
     tipTile = -2;
     renderPanel(); renderStatus(); drawMap();
   }
 
-  function refreshPlan(forceReach) {
+  function refreshPlan(forceReach) { return asMe(() => refreshPlanNow(forceReach)); }
+  function refreshPlanNow(forceReach) {
     const pl = App.plan, s = App.st;
     const a = pl && CC.getArmy(s, pl.armyId);
     if (!a) { App.plan = null; return; }
@@ -590,7 +747,8 @@
   }
 
   // why tile i cannot be painted right now, or null when it can
-  function paintBlock(i) {
+  function paintBlock(i) { return asMe(() => paintBlockNow(i)); }
+  function paintBlockNow(i) {
     const pl = App.plan, s = App.st, a = CC.getArmy(s, pl.armyId), t = s.tiles[i];
     if (!CC.passable(s, i)) return t.t === 'water' ? 'Armies cannot march on water. In a town with a harbor they can board ships.' : 'Mountains cannot be crossed.';
     if (pl.mp <= 0) return 'This army has no steps left this turn.';
@@ -663,6 +821,7 @@
 
   async function march() {
     const pl = App.plan, s = App.st;
+    if (pl && pl.queue && planOK()) { queueMarch(); return; }
     if (!pl || !pl.res || !myTurn()) return;
     if (!pl.res.valid) { sfx('deny'); hint(pl.res.errors[0] || 'Paint tiles on the map first.'); return; }
     const prev = pl.res.prev, color = CC.colorOf(s, s.cur);
@@ -732,7 +891,7 @@
         drag = null;
         return;
       }
-      drag = { id: e.pointerId, x0: p.x, y0: p.y, lx: p.x, ly: p.y, button: e.button, shift: e.shiftKey, touch: e.pointerType === 'touch', mode: null, lastTile: -1 };
+      drag = { id: e.pointerId, x0: p.x, y0: p.y, lx: p.x, ly: p.y, button: e.button, shift: e.shiftKey, alt: e.altKey, touch: e.pointerType === 'touch', mode: null, lastTile: -1 };
       // touch: a long press inspects, like a right-click
       if (drag.touch) { const d = drag; d.lp = setTimeout(() => { if (drag === d && !d.mode) { d.mode = 'inspect'; const i = R.pick(d.x0, d.y0); if (i >= 0) showInspect(i, d.x0, d.y0, R.shipAt(d.x0, d.y0)); } }, 550); }
     });
@@ -758,7 +917,7 @@
       }
       if (drag.id !== e.pointerId) return;
       if (!drag.mode && Math.hypot(p.x - drag.x0, p.y - drag.y0) > (drag.touch ? 10 : 5)) {
-        const painting = App.plan && myTurn() && !spaceHeld && (drag.button === 0 || drag.button === 2);
+        const painting = planOK() && !spaceHeld && (drag.button === 0 || drag.button === 2);
         if (painting) {
           const i0 = R.pick(drag.x0, drag.y0);
           drag.mode = drag.button === 2 || App.plan.region.includes(i0) ? 'remove' : 'add';
@@ -776,7 +935,7 @@
       clearTimeout(drag.lp);
       cv.classList.remove('grab');
       tipTile = -2;
-      if (!drag.mode && e.type === 'pointerup') clickAt(drag.x0, drag.y0, drag.button, drag.shift || e.shiftKey);
+      if (!drag.mode && e.type === 'pointerup') clickAt(drag.x0, drag.y0, drag.button, drag.shift || e.shiftKey, drag.alt || e.altKey);
       else if (drag.mode && drag.mode !== 'pan' && drag.mode !== 'inspect') renderAll();
       drag = null;
     };
@@ -801,15 +960,23 @@
     $('#z-fit').addEventListener('click', () => { R.fit(true); drawMap(); });
   }
 
-  function clickAt(x, y, button, shift) {
+  function clickAt(x, y, button, shift, alt) {
     const s = App.st, R = App.R;
     const i = R.pick(x, y), bid = R.bannerAt(x, y), sid = R.shipAt(x, y);
     const pl = App.plan;
     hideInspect();
     // right-click inspects whatever is there (and erases a painted tile while planning a march)
     if (button === 2) {
-      if (pl && myTurn() && i >= 0 && pl.region.includes(i)) { applyPaint(i, 'remove'); refreshPlan(); renderAll(); return; }
+      if (pl && planOK() && i >= 0 && pl.region.includes(i)) { applyPaint(i, 'remove'); refreshPlan(); renderAll(); return; }
       if (i >= 0) showInspect(i, x, y, sid);
+      return;
+    }
+    if (s.phase === 'pick') {
+      if (!myTurn() || i < 0) return;
+      const r = CC.canPickStart(s, s.cur, i);
+      if (r.ok) { App.pickSel = i; sfx('click'); }
+      else { App.pickSel = null; hint(r.reason); }
+      renderAll();
       return;
     }
     // a selected fleet of yours: sail, attack or bombard
@@ -833,19 +1000,21 @@
       const c = CC.cityAt(s, i);
       if (!(c && c.owner === s.cur)) { sfx('deny'); hint(plan.errors[0]); return; }
     }
-    if (sid != null && !(pl && myTurn() && pl.region.length)) { select({ kind: 'fleet', id: sid }); return; }
-    if (pl && myTurn()) {
+    if (sid != null && !(pl && planOK() && pl.region.length)) { select({ kind: 'fleet', id: sid }); return; }
+    if (pl && planOK()) {
+      const me = planner();
       const army = CC.getArmy(s, pl.armyId);
       if (shift && i >= 0 && (pl.region.includes(i) || i === army.tile)) { pl.dest = i; refreshPlan(); renderAll(); return; }
       if (!pl.region.length) {
         // nothing painted yet: clicks on other pieces switch what is selected (drag onto them to join them)
         const other = bid != null && bid !== pl.armyId && CC.getArmy(s, bid);
-        if (other && other.owner === s.cur) { select({ kind: 'army', id: bid }); return; }
+        // Alt-click marches onto your other army to join it; a plain click switches to it
+        if (other && other.owner === me && !alt) { select({ kind: 'army', id: bid }); return; }
         if (i < 0) return;
         if (i === army.tile) { if (!CC.cityAt(s, i)) select({ kind: 'tile', i }); return; }
         // your own town: march into it when the army can get there, otherwise open it
         const c = CC.cityAt(s, i);
-        if (c && c.owner === s.cur && paintBlock(i)) { select({ kind: 'city', id: c.id }); return; }
+        if (c && c.owner === me && paintBlock(i)) { select({ kind: 'city', id: c.id }); return; }
       }
       if (i >= 0 && i !== army.tile && applyPaint(i, pl.region.includes(i) ? 'remove' : 'add')) { refreshPlan(); renderAll(); }
       return;
@@ -906,11 +1075,11 @@
       const f = CC.getFleet(s, sid);
       if (f) return { cursor: 'hand', line: f.owner === s.cur && myTurn() ? `Click to command this fleet (${CC.fleetMovesLeft(f)} moves${f.fired ? '' : ', guns ready'}).` : `${f.n} warship${f.n === 1 ? '' : 's'} of ${CC.nameOf(s, f.owner)}.` };
     }
-    if (pl && myTurn()) {
+    if (pl && planOK()) {
       const army = CC.getArmy(s, pl.armyId);
       if (!army) return { cursor: 'arrow' };
       const other = bid != null && bid !== pl.armyId && CC.getArmy(s, bid);
-      if (!pl.region.length && other && other.owner === s.cur) return { cursor: 'hand', line: 'Click to command this army instead, or drag your path onto it to join it.' };
+      if (!pl.region.length && other && other.owner === planner()) return { cursor: 'hand', line: 'Click to command this army instead. To join it, Alt-click it or drag your path onto it.' };
       if (i === army.tile) return { cursor: 'arrow', line: 'Your army stands here. Paint the tiles it should march to.' };
       if (pl.region.includes(i)) {
         if (pl.res && pl.res.bad.has(i)) return { cursor: 'erase', line: `${pl.res.errors.find((e) => /zone|range/.test(e)) || 'This painted tile cannot be reached.'} Click to erase it.`, cls: 'bad' };
@@ -1177,7 +1346,7 @@
     });
   }
 
-  function battleCard(b) {
+  function battleCard(b, idx) {
     const s = App.st;
     const title = b.cityName ? `Siege of ${b.cityName}` : `Battle of ${b.place}`;
     const side = (role, owner, before, after, militia, base, mods, dice, L, eff, kMult) => {
@@ -1199,9 +1368,19 @@
       const fled = b.routedTo >= 0 && b.routedTo != null ? `The survivors fled to ${esc(s.cities[b.routedTo].name)}.` : CC.sum(b.defAfter) ? 'The few survivors scattered.' : 'The defenders were wiped out.';
       verdict = `<div class="verdict win reveal">${esc(CC.nameOf(s, b.attacker))} won. ${fled} The fighting cost ${b.fatigue} step${b.fatigue === 1 ? '' : 's'} of marching.</div>`;
     } else verdict = `<div class="verdict loss reveal">${esc(CC.nameOf(s, b.defender))} held the line. The attackers fell back.</div>`;
+    const ca = CC.colorOf(s, b.attacker), cd = CC.colorOf(s, b.defender), pa = Math.round((100 * b.Ae) / Math.max(0.01, b.Ae + b.De));
+    const most = Math.max(CC.sum(b.att), CC.sum(b.def) + (b.militia || 0)), per = Math.max(1, Math.ceil(most / 36));
+    const scene = `<div class="bscene">
+        <div class="bnames"><div>${mark(s, b.attacker)}<b>${esc(CC.nameOf(s, b.attacker))}</b><small>Attacker · ${CC.sum(b.att)}</small><span class="dice bdice" ${tip(`Luck ${b.ad[0] + b.ad[1]}: ×${b.La.toFixed(2)}`)}>${dieHtml(b.ad[0])}${dieHtml(b.ad[1])}</span></div>
+          <div>${mark(s, b.defender)}<b>${esc(CC.nameOf(s, b.defender))}</b><small>Defender · ${CC.sum(b.def) + (b.militia || 0)}</small><span class="dice bdice" ${tip(`Luck ${b.dd[0] + b.dd[1]}: ×${b.Ld.toFixed(2)}`)}>${dieHtml(b.dd[0])}${dieHtml(b.dd[1])}</span></div></div>
+        <canvas class="bcv" data-b="${idx}" aria-label="The two armies on the field"></canvas>
+        ${per > 1 ? `<p class="bnote">Each figure stands for about ${per} soldiers.</p>` : ''}
+        <div class="bbar reveal" ${tip('Fighting strength after luck: the longer bar wins.')}><span style="width:${pa}%;background:${ca}"><b>${b.Ae.toFixed(1)}</b></span><span style="width:${100 - pa}%;background:${cd}"><b>${b.De.toFixed(1)}</b></span></div>
+      </div>`;
     return `<article class="battle"><header><h3>${esc(title)}</h3><span class="tag">Odds before battle ${pct(b.odds)}</span></header>
-      <div class="sides">${side('Attacker', b.attacker, b.att, b.attAfter, 0, b.pw.aBase, b.pw.aMods, b.ad, b.La, b.Ae, b.pw.kMult)}<div class="vs">vs</div>
-      ${side('Defender', b.defender, b.def, b.defAfter, b.militia, b.pw.dBase, b.pw.dMods, b.dd, b.Ld, b.De, null)}</div>${verdict}</article>`;
+      ${scene}${verdict}
+      <details class="bdetails"><summary>How the strength was counted</summary><div class="sides">${side('Attacker', b.attacker, b.att, b.attAfter, 0, b.pw.aBase, b.pw.aMods, b.ad, b.La, b.Ae, b.pw.kMult)}<div class="vs">vs</div>
+      ${side('Defender', b.defender, b.def, b.defAfter, b.militia, b.pw.dBase, b.pw.dMods, b.dd, b.Ld, b.De, null)}</div></details></article>`;
   }
 
   function showBattleReport(rep) {
@@ -1213,7 +1392,22 @@
       const m = modal(`<h2>${rep.battles.length > 1 ? 'Campaign report' : 'Battle report'}</h2>${rep.battles.map(battleCard).join('')}
         <p class="lead reveal">${foot}</p><div class="modal-actions"><button class="btn primary" type="button" data-close>Continue</button></div>`, { wide: true, onClose: resolve });
       sfx('battle', { dur: 1.7 });
-      animateDice(m).then(() => sfx(rep.halted ? 'defeat' : rep.cities.length ? 'capture' : 'victory'));
+      // the armies on the field: standing first, then the fallen go down once the dice settle
+      const scenes = [...m.querySelectorAll('canvas.bcv')].map((cv) => {
+        const b = rep.battles[+cv.dataset.b], dpr = Math.min(2, window.devicePixelRatio || 1);
+        cv.style.width = '100%'; cv.style.height = '180px';
+        cv.width = Math.round(cv.clientWidth * dpr) || 600; cv.height = Math.round(180 * dpr);
+        const colors = [CC.colorOf(s, b.attacker), CC.colorOf(s, b.defender)];
+        const draw = (k) => CC.drawBattle(cv, b, colors, k);
+        draw(0);
+        return draw;
+      });
+      animateDice(m).then(() => {
+        sfx(rep.halted ? 'defeat' : rep.cities.length ? 'capture' : 'victory');
+        const t0 = performance.now();
+        const step = (now) => { const k = Math.min(1, (now - t0) / 650); scenes.forEach((d) => d(k)); if (k < 1 && m.isConnected) requestAnimationFrame(step); };
+        requestAnimationFrame(step);
+      });
     });
   }
 
@@ -1254,15 +1448,15 @@
     if (CC.I18N && CC.I18N.lang === 'tr' && CC.I18N.rules) { modal(CC.I18N.rules(RULES, UN), { wide: true }); return; }
     modal(`<h2>How to play</h2><p class="lead">Grow from one castle into a realm. The game ends after the last round, or when a single house remains.</p>
       <div class="rules">
-        <section><h3>Your turn</h3><ul><li>Collect gold from <b>towns, farms and mines</b>, minus army upkeep.</li><li>Recruit and build in any order.</li><li>Give each army one march. Press <b>End turn</b> when done.</li></ul></section>
-        <section><h3>Marching and conquest</h3><ul><li>Click a banner, choose who marches, then <b>paint tiles</b> on the map. Any shape works. Paint onto another of your armies (or your town) to join it there.</li><li>Recruits and warships take a turn to train: paid now, they appear in their town at the start of your next turn, ready to move. Until then you can cancel them in the town's panel for a full refund.</li><li>A force seizes up to <b>1 + soldiers/2</b> tiles (knights count double, max ${RULES.capMax}).</li><li>Each army has ${RULES.baseMP} steps a turn (knights alone ${RULES.cavalryMP}) and may split them over several marches. Forest, hills and rivers cost 2 outside your land; your own roads always cost 1. The land it may seize is a budget for the whole turn too.</li><li><b>Zones of control:</b> every town, castle and outpost not yours controls the 6 tiles around it (armies hold only their own tile). An army that steps onto one of those tiles may only attack the town or outpost, or turn back the way it came: it cannot cut across or end its march there. Painting the enemy is how you attack. Your own land is never controlled.</li><li>Winning a battle costs extra steps: 1 for a rout, up to 4 for an even fight, so a big army crushing a small one can keep marching. Losing a battle ends the army's moves for the turn.</li><li>Large armies are a little slower: −1 step from 16 soldiers, −2 from 31.</li><li>Each march into land you don't hold uses a <b>marching order</b>: 2 + 1 per town, max ${RULES.ordersMax}.</li></ul></section>
+        <section><h3>Your turn</h3><ul><li>Collect gold from <b>towns, farms and mines</b>, minus army upkeep.</li><li>Recruit and build in any order. Buildings, like recruits, take a turn: paid now, finished at the start of your next turn (you can cancel them until then).</li><li>Give each army one march. Press <b>End turn</b> when done.</li></ul></section>
+        <section><h3>Marching and conquest</h3><ul><li>Click a banner, choose who marches, then <b>paint tiles</b> on the map. Any shape works. Paint onto another of your armies (or your town) to join it there.</li><li>Recruits and warships take a turn to train: paid now, they appear in their town at the start of your next turn, ready to move. Until then you can cancel them in the town's panel for a full refund.</li><li>A force seizes up to <b>1 + soldiers/2</b> tiles (knights count double, max ${RULES.capMax}).</li><li>Each army has ${RULES.baseMP} steps a turn (knights alone ${RULES.cavalryMP}) and may split them over several marches. Forest, hills and rivers cost 2 outside your land; your own roads always cost 1. The land it may seize is a budget for the whole turn too.</li><li><b>Zones of control:</b> every town, castle and outpost not yours controls the 6 tiles around it (armies hold only their own tile). An army that steps onto one of those tiles may only attack the town or outpost, or turn back the way it came: it cannot cut across or end its march there. Land taken inside an enemy zone goes back to its owner when your turn ends, unless one of your armies stands on it. Painting the enemy is how you attack. Your own land is never controlled.</li><li>Winning a battle costs extra steps: 1 for a rout, up to 4 for an even fight, so a big army crushing a small one can keep marching. Losing a battle ends the army's moves for the turn.</li><li>Large armies are a little slower: −1 step from 26 soldiers, −2 from 51. Joining armies keep the average of the steps each part had left.</li><li>Each march into land you don't hold uses a <b>marching order</b>: 2 + 1 per town, max ${RULES.ordersMax}.</li></ul></section>
         <section><h3>Battles</h3><ul><li>Enemies standing in your painted land fight you, nearest first.</li><li>Strength = soldiers × unit power × terrain, walls and river modifiers × luck.</li><li>Luck is 2d6 for each side: 2 gives ×0.70, 7 gives ×1.00, 12 gives ×1.30.</li><li>The loser loses at least half its troops and flees. The winner's losses shrink as the gap widens.</li></ul></section>
         <section><h3>Units</h3><ul>${UN.map((d) => `<li><b>${d.name}</b> ${d.cost}g · att ${d.att} · def ${d.def}. ${esc(d.desc)}</li>`).join('')}<li>Upkeep each turn: ${UN.map((d) => `${d.name.toLowerCase()} ${d.upkeep}`).join(', ')}.</li></ul></section>
-        <section><h3>Sea and trade</h3><ul><li>A town with a <b>Harbor</b> launches <b>warships</b> (${RULES.shipCost}g, ${RULES.shipUpkeep} a turn). Click a fleet, then a sea tile to sail up to ${RULES.fleetMP} tiles, faster than anything on land; fleets of up to ${RULES.riverShips} ships can also sail up rivers. Choose how many ships sail in the fleet's panel to split it; sail onto your own ships to join them again. Sail onto an enemy fleet to fight, or onto enemy soldiers at sea to sink them.</li><li>Once a turn a fleet can <b>bombard</b> an enemy army on the shore next to it: each ship kills a soldier on ${RULES.bombardHit}+ with 2d6 (${RULES.bombardWallHit}+ behind walls), and they cannot shoot back.</li><li><b>Trading posts</b> sit far out at sea (on the Known World, one off each colonial land). Keep a warship on one to earn its gold every turn. The faint dotted <b>sea lanes</b> are the trade routes: the gold sails home along them, then to your nearest harbor, and the route lights up in your colour.</li><li>An enemy warship anywhere on a route cuts the whole income, as does an enemy army on a caravan road. Peace partners never block.</li><li><b>Trade agreements</b> (in Deal, needs peace) pay both houses every turn along a caravan or sea route between your towns. Every market level you own adds +${RULES.marketTrade} gold to each of your agreements (up to +${RULES.marketTradeMax} each).</li></ul></section>
+        <section><h3>Sea and trade</h3><ul><li>A town with a <b>Harbor</b> launches <b>warships</b> (${RULES.shipCost}g, ${RULES.shipUpkeep} a turn). Click a fleet, then a sea tile to sail up to ${RULES.fleetMP} tiles, faster than anything on land; fleets of up to ${RULES.riverShips} ships can also sail up rivers. Choose how many ships sail in the fleet's panel to split it; sail onto your own ships to join them again. Sail onto an enemy fleet to fight, or onto enemy soldiers at sea to sink them.</li><li>Once a turn a fleet can <b>bombard</b> an enemy army on the shore next to it: each ship kills a soldier on ${RULES.bombardHit}+ with 2d6 (${RULES.bombardWallHit}+ behind walls), and they cannot shoot back.</li><li><b>Trading posts</b> sit far out at sea (on the Known World, two to four along the coasts of each distant land: the Americas, Africa, Arabia, India and Cathay, reached only by sea; the Sahara cannot be crossed). Keep a warship on one to earn its gold every turn. The faint dotted <b>sea lanes</b> are the trade routes: the gold sails home along them, then to your nearest harbor, and the route lights up in your colour.</li><li><b>Blockades:</b> park a warship on a sea lane and its panel lists the enemy trade passing through. Press <b>Block</b> to cut a house's routes there; only the houses you pick lose their income, and only while you stay. An enemy army on a caravan road cuts that road too. Peace partners cannot be blocked.</li><li><b>Trade agreements</b> (in Deal, needs peace) pay both houses every turn along a caravan or sea route between your towns. Every market level you own adds +${RULES.marketTrade} gold to each of your agreements (up to +${RULES.marketTradeMax} each).</li></ul></section>
         <section><h3>Land and economy</h3><ul><li>One <b>farm</b> per ${RULES.tilesPerFarm} tiles you hold, on plains or rivers: +${RULES.farmIncome} gold (+${RULES.riverFarmBonus} by a river).</li><li><b>Mines</b> on gold deposits: +${RULES.mineIncome} gold.</li><li>Captured farms and mines change hands. Post soldiers on them to defend them (×${RULES.structureDef} palisade).</li></ul></section>
-        <section><h3>Towns, walls and ships</h3><ul><li>Towns give gold, recruits and orders. Your capital gives ${RULES.capitalIncome}, other towns ${RULES.cityIncome}.</li><li><b>Walls</b> multiply defense up to ×${RULES.walls.mult[3]}. A captured town loses one wall level.</li><li>In a town with a <b>harbor</b>, armies can <b>board ships</b> (${RULES.embarkBase}g + ${RULES.embarkPer}g a soldier). Afloat they sail ${RULES.transportMP} tiles a turn and land on any open shore, which ends their turn. They cannot fight at sea: warships that catch them drown most of them.</li><li>Build a <b>port</b> (${RULES.portCost} gold, ${RULES.portUpkeep} a turn) on any coastal tile you hold: warships are built there and armies board there, without needing a coastal town.</li><li>Found new <b>castles</b> for ${RULES.castleCost} gold on your land, ${RULES.castleMinDist}+ tiles from any town.</li><li><b>Outposts</b> (${RULES.outpostCost} gold, ${RULES.outpostUpkeep} a turn) control the 6 tiles around them. ${RULES.outpostMilitia} militia defend them, soldiers posted there fight ×${RULES.outpostDef}, and a captured outpost is burned.</li><li>A house that loses every town is out.</li></ul></section>
+        <section><h3>Towns, walls and ships</h3><ul><li>Towns give gold, recruits and orders. Your capital gives ${RULES.capitalIncome}, other towns ${RULES.cityIncome}.</li><li><b>Walls</b> multiply defense up to ×${RULES.walls.mult[3]}. A captured town loses one wall level.</li><li>In a town with a <b>harbor</b>, armies can <b>board ships</b> (${RULES.embarkBase}g + ${RULES.embarkPer}g a soldier, then ${RULES.seaUpkeep}g a soldier each turn at sea). Afloat they sail ${RULES.transportMP} tiles a turn and land on any open shore, which ends their turn. They cannot fight at sea: warships that catch them drown most of them.</li><li>Build a <b>port</b> (${RULES.portCost} gold, ${RULES.portUpkeep} a turn) on any coastal tile you hold: warships are built there and armies board there, without needing a coastal town.</li><li>Found new <b>castles</b> for ${RULES.castleCost} gold on your land, ${RULES.castleMinDist}+ tiles from any town.</li><li><b>Outposts</b> (${RULES.outpostCost} gold, ${RULES.outpostUpkeep} a turn) control the 6 tiles around them. ${RULES.outpostMilitia} militia defend them, soldiers posted there fight ×${RULES.outpostDef}, and a captured outpost is burned.</li><li>A house that loses every town is out.</li></ul></section>
         <section><h3>Diplomacy</h3><ul><li>Press <b>Deal</b> next to a house in the Diplomacy tab to offer gold now, gold every turn for ${RULES.tributeTurns} turns (tribute), and peace.</li><li><b>Peace</b> lasts ${RULES.peaceRounds} rounds and cannot be broken: neither side may march into the other's land, and their zones stop hindering each other.</li><li>Computer houses answer at once; people answer at the start of their turn. Unanswered offers lapse after a round.</li></ul></section>
-        <section><h3>Controls</h3><ul><li>Drag: paint, or pan when nothing is selected. Right-drag erases. Shift-click sets where the army stops. Right-click inspects.</li><li>With an army selected, clicking another of your armies selects that one instead; to join them, paint the path onto it.</li><li>Touch screens: long-press to inspect.</li><li>Scroll or two fingers to pan. Pinch, ctrl+scroll or the +/− buttons to zoom.</li><li><b>N</b> next army · <b>Enter</b> march · <b>Esc</b> clear · <b>E</b> end turn</li></ul></section>
+        <section><h3>Controls</h3><ul><li>Drag: paint, or pan when nothing is selected. Right-drag erases. Shift-click sets where the army stops. Right-click inspects.</li><li>With an army selected, clicking another of your armies selects that one instead; to join them, Alt-click it or paint the path onto it.</li><li>Touch screens: long-press to inspect.</li><li>Scroll or two fingers to pan. Pinch, ctrl+scroll or the +/− buttons to zoom.</li><li><b>N</b> next army · <b>Enter</b> march · <b>Esc</b> clear · <b>E</b> end turn</li></ul></section>
       </div><div class="modal-actions"><button class="btn primary" type="button" data-close>Back to the map</button></div>`, { wide: true });
   }
 
@@ -1428,7 +1622,7 @@
     const prefs = load(PREF_KEY) || {};
     const cfg = {
       seats: Array.isArray(prefs.seats) && prefs.seats.length >= 2 ? prefs.seats.slice(0, 8) : defaultSeats(),
-      size: prefs.size || 'normal', map: prefs.map || 'realm', rounds: prefs.rounds != null ? prefs.rounds : 15, timer: prefs.timer || 0, seed: '',
+      size: prefs.size || 'normal', map: prefs.map || 'realm', rounds: prefs.rounds != null ? prefs.rounds : 15, timer: prefs.timer || 0, starts: prefs.starts === 'pick' ? 'pick' : 'random', seed: '',
     };
     const saved = load(SAVE_KEY);
     const firstVisit = !saved && !(prefs && prefs.tutStep != null);
@@ -1451,7 +1645,7 @@
       const savedInfo = saved && saved.save ? `Round ${saved.save.round}, ${saved.save.players.length} houses` : '';
       box.innerHTML = `
         <div class="setup-hero">
-          <svg width="64" height="72" viewBox="0 0 30 34" aria-hidden="true"><path d="M3 2h24v14c0 8-6 13-12 16C9 29 3 24 3 16z" fill="#d7a646" stroke="#2a1e08" stroke-width="1.2"/><path d="M15 6v22M7 12h16" stroke="#2a1e08" stroke-width="2"/></svg>
+          <svg width="70" height="70" viewBox="0 0 34 34" aria-hidden="true"><circle cx="17" cy="17" r="15.6" fill="#d7a646" stroke="#2a1e08" stroke-width="1.4"/><circle cx="17" cy="17" r="12.6" fill="none" stroke="#2a1e08" stroke-width="0.7" opacity="0.55"/><path d="M7.5 25h19v-4.6c0-.4-.2-.8-.5-1.1C23.6 16.4 20.5 14.8 17 14.8s-6.6 1.6-9 4.5c-.3.3-.5.7-.5 1.1z" fill="#2a1e08"/><path d="M9.5 20.2h15" stroke="#d7a646" stroke-width="0.8" opacity="0.7"/><path d="M15.3 25v-3.6a1.7 1.7 0 0 1 3.4 0V25z" fill="#d7a646"/><path d="M17 14.8V5.2" stroke="#2a1e08" stroke-width="1.3" stroke-linecap="round"/><circle cx="17" cy="5" r="1.1" fill="#2a1e08"/><path d="M17 7.2c2.2.2 4.6 1.6 6.4 4.4-2.3-1.2-4.3-1.4-6.4-1.1z" fill="#2a1e08"/></svg>
           <div><h1 id="setup-title">Kurultay</h1><p>Paint the borders you want, then fight for them. Turn-based conquest for 2 to 8 rulers around one screen, against the computer, or online.</p></div>${CC.I18N ? CC.I18N.switcher() : ''}
         </div>
         <div class="setup-grid">
@@ -1472,6 +1666,7 @@
             <div class="field"><label for="opt-size">Map size</label><select id="opt-size">${[['small', 'Small: close quarters'], ['normal', 'Normal'], ['large', 'Large: a wide world to explore']].map(([k, l]) => `<option value="${k}" ${cfg.size === k ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
             <div class="field"><label for="opt-rounds">Length</label><select id="opt-rounds">${[[10, '10 rounds'], [15, '15 rounds'], [20, '20 rounds'], [30, '30 rounds'], [0, 'Until one house remains']].map(([k, l]) => `<option value="${k}" ${cfg.rounds === k ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
             <div class="field"><label for="opt-timer">Turn timer</label><select id="opt-timer">${[[0, 'Off'], [60, '60 seconds'], [90, '90 seconds'], [120, '2 minutes'], [180, '3 minutes']].map(([k, l]) => `<option value="${k}" ${cfg.timer === k ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
+            <div class="field"><label for="opt-starts">Starting cities</label><select id="opt-starts">${[['random', 'Placed at random'], ['pick', 'Each house picks, in a random order']].map(([k, l]) => `<option value="${k}" ${cfg.starts === k ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
             <div class="field"><label for="opt-seed">Map seed (optional)</label><input id="opt-seed" inputmode="numeric" placeholder="Random" value="${esc(cfg.seed)}"></div>
           </section>
         </div>
@@ -1485,9 +1680,9 @@
     }
     function startConfig() {
       const seedTxt = String(cfg.seed || '').trim();
-      return { players: cfg.seats.map((x) => ({ name: x.name.trim() || 'Nameless house', color: x.color, ai: x.ai, flag: CC.validFlag(x.flag) ? x.flag : null })), size: cfg.size, map: cfg.map, rounds: cfg.rounds, timer: cfg.timer, seed: seedTxt ? (parseInt(seedTxt, 10) >>> 0) || hashStr(seedTxt) : undefined };
+      return { players: cfg.seats.map((x) => ({ name: x.name.trim() || 'Nameless house', color: x.color, ai: x.ai, flag: CC.validFlag(x.flag) ? x.flag : null })), size: cfg.size, map: cfg.map, rounds: cfg.rounds, timer: cfg.timer, pickStarts: cfg.starts === 'pick', seed: seedTxt ? (parseInt(seedTxt, 10) >>> 0) || hashStr(seedTxt) : undefined };
     }
-    function savePrefs() { store(PREF_KEY, Object.assign(load(PREF_KEY) || {}, { seats: cfg.seats, size: cfg.size, map: cfg.map, rounds: cfg.rounds, timer: cfg.timer })); }
+    function savePrefs() { store(PREF_KEY, Object.assign(load(PREF_KEY) || {}, { seats: cfg.seats, size: cfg.size, map: cfg.map, rounds: cfg.rounds, timer: cfg.timer, starts: cfg.starts })); }
     box.addEventListener('input', (e) => {
       if (e.target.dataset.i != null && e.target.type === 'text') { cfg.seats[+e.target.dataset.i].name = e.target.value; savePrefs(); }
       if (e.target.id === 'opt-seed') cfg.seed = e.target.value;
@@ -1495,6 +1690,7 @@
     box.addEventListener('change', (e) => {
       if (e.target.id === 'opt-size') cfg.size = e.target.value;
       if (e.target.id === 'opt-map') cfg.map = e.target.value;
+      if (e.target.id === 'opt-starts') cfg.starts = e.target.value;
       if (e.target.id === 'opt-rounds') cfg.rounds = +e.target.value;
       if (e.target.id === 'opt-timer') cfg.timer = +e.target.value;
       savePrefs();
@@ -1550,7 +1746,7 @@
   // Load a game state and run whatever comes next. online: the session object, or null for a local game.
   function startLoaded(st, online) {
     App.token++;
-    App.st = st; App.online = online || null; App.busy = false; App.sel = null; App.plan = null;
+    App.st = st; App.online = online || null; App.busy = false; App.sel = null; App.plan = null; App.queue = [];
     App.R.setState(st);
     App.R.fit();
     App.fitted = true;
@@ -1576,10 +1772,12 @@
   async function beginTurn() {
     const s = App.st, token = App.token;
     stopTimer();
-    App.sel = null; App.plan = null; $('#map').classList.remove('paint');
+    // a march being planned ahead survives other houses' turns
+    if (!(App.plan && App.plan.queue && s.cur !== App.plan.me)) { App.sel = null; App.plan = null; $('#map').classList.remove('paint'); }
     renderAll();
     if (s.over) { showGameOver(); return; }
     const p = s.players[s.cur];
+    if (s.phase === 'pick') { pickTurn(token); return; }
     if (p.ai) {
       if (!App.online || App.online.runsAI()) { await sleep(60); if (token === App.token && App.st === s) await runAI(token); }
       return;
@@ -1597,6 +1795,48 @@
     renderAll();
   }
 
+  // one house's choice of capital site
+  async function pickTurn(token) {
+    const s = App.st, p = s.players[s.cur];
+    App.pickSel = null;
+    if (p.ai) {
+      if (App.online && !App.online.runsAI()) return;
+      App.busy = true; renderAll();
+      await sleep({ slow: 900, normal: 500, fast: 150, instant: 0 }[App.prefs.aiSpeed] || 0);
+      if (token !== App.token || App.st !== s) return;
+      App.busy = false;
+      const r = CC.aiPickStart(s);
+      if (r.ok) { const c = s.cities[r.city]; App.R.pulse(c.tile, CC.colorOf(s, c.owner)); }
+      if (s.phase === 'play') App.R.fit();
+      commit();
+      setTimeout(() => { if (token === App.token) beginTurn(); }, 0);
+      return;
+    }
+    if (App.online && !App.online.isMine(s.cur)) return;
+    sfx('horn');
+    App.R.fit(true); drawMap();
+    if (App.online || humanCount() > 1) {
+      await new Promise((resolve) => modal(`<div class="pane-head">${mark(s, s.cur)}<h2>${esc(p.name)}, choose your capital</h2></div>
+        <p class="lead">Pick one of the marked sites on the map. Houses choose one after another, in an order drawn by lot.</p>
+        <div class="modal-actions"><button class="btn primary" type="button" data-close>Choose</button></div>`, { onClose: resolve, dismiss: false }));
+      if (token !== App.token || App.st !== s) return;
+    }
+    renderAll();
+  }
+  function doPickStart() {
+    const s = App.st, t = App.pickSel;
+    if (!myTurn() || s.phase !== 'pick' || t == null) return;
+    const r = CC.pickStart(s, s.cur, t);
+    if (!r.ok) { hint(r.reason); return; }
+    App.pickSel = null;
+    sfx('build');
+    App.R.pulse(t, CC.colorOf(s, s.cities[r.city].owner));
+    if (s.phase === 'play') App.R.fit();
+    commit();
+    const token = App.token;
+    setTimeout(() => { if (token === App.token) beginTurn(); }, 0);
+  }
+
   async function runAI(token) {
     const s = App.st;
     App.busy = true; renderAll();
@@ -1605,6 +1845,7 @@
     const speed = { slow: 1.1, normal: 0.75, fast: 0.4, instant: 0 }[App.prefs.aiSpeed] || 0;
     for (const step of CC.ai.aiTurn(s)) {
       if (token !== App.token) return;
+      if (App.plan && App.plan.queue) { if (CC.getArmy(s, App.plan.armyId)) refreshPlan(); else { App.plan = null; App.sel = null; } }
       if (App.online && step.report) App.online.push();
       if (step.kind === 'sail' && delay) {
         const rep = step.report;
@@ -1663,6 +1904,7 @@
   }
 
   function onEndTurn() {
+    if (App.st && App.st.phase === 'pick') { sfx('deny'); hint('Houses are still choosing their capitals.'); return; }
     if (!myTurn()) { if (App.st && !App.busy) { sfx('deny'); hint(plainText($('#btn-end').dataset.tip || 'Wait for your turn.')); } return; }
     const s = App.st, P = s.players[s.cur];
     const idle = s.armies.filter((a) => a.owner === s.cur && !(a.used > 0)).length;
@@ -1768,8 +2010,8 @@
       done: () => tutP().stats.taken > 0,
       glow: '[data-act="march"]', marks: () => [] },
     { title: 'Build a farm',
-      body: () => 'Farms pay gold every turn. Click the <b>green plains tile</b> outlined in gold inside your border, then press <b>Build</b> next to Farm. You may build 1 farm per 5 tiles you hold, so more land means more farms.',
-      done: () => CC.summary(App.st, 0).farms >= 1,
+      body: () => 'Farms pay gold every turn. Click the <b>green plains tile</b> outlined in gold inside your border, then press <b>Build</b> next to Farm. You may build 1 farm per 5 tiles you hold, so more land means more farms. It is finished at the start of your next turn.',
+      done: () => CC.farmSlots(App.st, 0).farms >= 1,
       glow: '[data-act="build"][data-kind="farm"]', marks: () => [tutFarmTile()] },
     { title: 'Recruit soldiers',
       body: () => 'Click your <b>castle</b>, then press <b>+5</b> next to Spearmen. Soldiers cost gold now and a little upkeep every turn. They train for a turn and join your garrison at the start of your next turn.',

@@ -14,7 +14,7 @@
     tree: '#3e5b2f', treeHi: '#5d7e41', hill: '#7a5428', hillHi: '#ddb87c',
     rockLit: '#bbb1a1', rockDark: '#776e62', snow: '#f2ede2',
     river: '#3c7593', riverHi: '#5c9ab8', coast: 'rgba(38,30,18,0.55)', grid: 'rgba(40,32,20,0.10)',
-    gold: '#f0c445', goldDark: '#7a5810', ink: '#1d1812', parch: '#efe4c8', colony: '#b8a06c',
+    gold: '#f0c445', goldDark: '#7a5810', ink: '#1d1812', parch: '#efe4c8', colony: '#b8a06c', desert: '#dcc48e',
   };
 
   function rgba(hex, a) {
@@ -312,6 +312,13 @@
           g.fillStyle = PAL.hillHi; g.fill();
           g.lineWidth = 2; g.strokeStyle = PAL.hill; g.stroke();
         }
+      } else if (t.t === 'desert') {
+        // dunes
+        g.lineWidth = 1.6; g.strokeStyle = 'rgba(150,112,52,0.55)';
+        for (const [dx, dy] of [[-0.3, -0.15], [0.22, 0.05], [-0.1, 0.32]]) {
+          const x = p.x + dx * S, y = p.y + dy * S;
+          g.beginPath(); g.moveTo(x - S * 0.22, y + S * 0.05); g.quadraticCurveTo(x, y - S * 0.14, x + S * 0.22, y + S * 0.05); g.stroke();
+        }
       } else if (t.t === 'mountain') {
         for (const [dx, dy, s] of [[-0.18, 0.2, 0.62], [0.28, 0.3, 0.46]]) {
           const x = p.x + dx * S, base = p.y + dy * S + S * 0.2, h = s * S * 1.1, w = s * S;
@@ -379,6 +386,20 @@
     g.beginPath(); g.moveTo(-S * 0.18, S * 0.22); g.lineTo(-S * 0.18, -S * 0.5); g.lineTo(S * 0.12, -S * 0.42); g.stroke();
     g.beginPath(); g.moveTo(S * 0.12, -S * 0.42); g.lineTo(S * 0.12, -S * 0.22); g.lineWidth = 1; g.stroke();
     g.beginPath(); g.moveTo(-S * 0.18, -S * 0.5); g.lineTo(-S * 0.42, -S * 0.44); g.lineTo(-S * 0.18, -S * 0.36); g.closePath(); g.fillStyle = color; g.fill(); g.lineWidth = 1; g.stroke();
+    g.restore();
+  }
+  function drawScaffold(g, x, y, S, color) {
+    g.save(); g.translate(x, y + S * 0.1);
+    g.strokeStyle = '#8a5f34'; g.lineWidth = Math.max(1.5, S * 0.07); g.lineCap = 'round';
+    const w = S * 0.5, h = S * 0.55;
+    g.beginPath();
+    g.moveTo(-w / 2, h / 2); g.lineTo(-w / 2, -h / 2); g.moveTo(w / 2, h / 2); g.lineTo(w / 2, -h / 2);
+    g.moveTo(-w / 2, 0); g.lineTo(w / 2, 0); g.moveTo(-w / 2, -h / 2); g.lineTo(w / 2, -h / 2);
+    g.moveTo(-w / 2, h / 2); g.lineTo(w / 2, 0); g.moveTo(-w / 2, 0); g.lineTo(w / 2, -h / 2);
+    g.stroke();
+    g.strokeStyle = PAL.ink; g.lineWidth = 1;
+    g.beginPath(); g.moveTo(w / 2, -h / 2); g.lineTo(w / 2, -h / 2 - S * 0.3); g.stroke();
+    g.beginPath(); g.moveTo(w / 2, -h / 2 - S * 0.3); g.lineTo(w / 2 + S * 0.24, -h / 2 - S * 0.22); g.lineTo(w / 2, -h / 2 - S * 0.14); g.closePath(); g.fillStyle = color; g.fill(); g.stroke();
     g.restore();
   }
   function drawTower(g, x, y, S, color) {
@@ -620,6 +641,81 @@
     return cv;
   }
   CC.flagImage = flagImage;
+
+  // ------------------------------------------------------------ battle scene for the report
+  // The attacker's army stands on the left facing right, the defender's on the right facing left.
+  // phase 0: everyone standing; phase 1: the fallen lie greyed on the field. k (0..1) eases between them.
+  function drawBattle(cv, b, colors, k) {
+    const g = cv.getContext('2d'), dpr = cv.width / cv.clientWidth || 1, W = cv.clientWidth, H = cv.clientHeight;
+    g.setTransform(dpr, 0, 0, dpr, 0, 0);
+    g.clearRect(0, 0, W, H);
+    // sky and ground
+    const sky = g.createLinearGradient(0, 0, 0, H * 0.42);
+    sky.addColorStop(0, '#2b3446'); sky.addColorStop(1, '#6d6a62');
+    g.fillStyle = sky; g.fillRect(0, 0, W, H * 0.42);
+    const ground = { plains: ['#8d9a55', '#6b7a3c'], forest: ['#61794a', '#465c33'], hills: ['#a98a55', '#7c6436'] }[b.terrain] || ['#8d9a55', '#6b7a3c'];
+    const gg = g.createLinearGradient(0, H * 0.4, 0, H);
+    gg.addColorStop(0, ground[0]); gg.addColorStop(1, ground[1]);
+    g.fillStyle = gg; g.fillRect(0, H * 0.4, W, H * 0.6);
+    const R = lcg(b.tile + 7);
+    if (b.terrain === 'hills') {
+      g.fillStyle = 'rgba(70,52,28,0.35)';
+      for (let x = -40; x < W + 40; x += 90) { g.beginPath(); g.ellipse(x + R() * 30, H * 0.43, 70, 22, 0, Math.PI, 0); g.fill(); }
+    }
+    if (b.terrain === 'forest') {
+      for (let x = 6; x < W; x += 16 + R() * 10) {
+        const y = H * 0.4 + R() * 6, r = 7 + R() * 5;
+        g.fillStyle = '#3c5230'; g.beginPath(); g.arc(x, y, r, 0, Math.PI * 2); g.fill();
+      }
+    }
+    if (b.river) {
+      g.fillStyle = 'rgba(90,140,180,0.85)';
+      g.beginPath(); g.moveTo(W * 0.47, H * 0.4); g.quadraticCurveTo(W * 0.53, H * 0.7, W * 0.48, H); g.lineTo(W * 0.54, H); g.quadraticCurveTo(W * 0.58, H * 0.7, W * 0.51, H * 0.4); g.closePath(); g.fill();
+    }
+    // the town's walls behind the defenders
+    if (b.cityName || b.tower) {
+      const wx = W * 0.6, wy = H * 0.24, ww = W * 0.4, wh = H * 0.2 + (b.walls || 0) * H * 0.04;
+      g.fillStyle = '#8f887e'; g.fillRect(wx, wy + H * 0.2 - wh + H * 0.02, ww, wh);
+      g.fillStyle = '#6f685f';
+      for (let x = wx; x < wx + ww; x += 12) g.fillRect(x, wy + H * 0.2 - wh + H * 0.02 - 6, 7, 6);
+      g.fillStyle = colors[1]; g.fillRect(wx + ww * 0.5, wy + H * 0.2 - wh - 20, 14, 9);
+      g.strokeStyle = '#2a2018'; g.lineWidth = 1.5; g.beginPath(); g.moveTo(wx + ww * 0.5, wy + H * 0.2 - wh - 20); g.lineTo(wx + ww * 0.5, wy + H * 0.2 - wh + 4); g.stroke();
+    }
+    // figures: one per soldier, or one per few soldiers in a big battle
+    const most = Math.max(sum5(b.att), sum5(b.def) + (b.militia || 0));
+    const per = Math.max(1, Math.ceil(most / 36));
+    const FRONT = [2, 3, 0, 1, 4]; // knights and swords in front, cannons at the back
+    const side = (before, after, militia, color, dir) => {
+      const list = [];
+      for (const t of FRONT) {
+        const n = Math.ceil((before[t] || 0) / per), dead = Math.min(n, Math.round(((before[t] || 0) - (after[t] || 0)) / per));
+        for (let j = 0; j < n; j++) list.push({ t, dead: j < dead });
+      }
+      if (militia) for (let j = 0; j < Math.ceil(militia / per); j++) list.push({ t: 0, dead: false, militia: true });
+      const rows = list.length > 24 ? 4 : list.length > 8 ? 3 : 2;
+      const h = Math.min(H * 0.2, (W * 0.4) / Math.max(4, Math.ceil(list.length / rows)) / 0.62);
+      const colW = h * 0.62, cx = W / 2;
+      list.forEach((f, idx) => {
+        const col = Math.floor(idx / rows), row = idx % rows;
+        const depth = 0.55 + 0.45 * ((row + 1) / rows);
+        const x = cx + dir * (W * 0.06 + col * colW + (row % 2) * colW * 0.4 + (f.t === 2 ? colW * 0.2 : 0));
+        const y = H * 0.48 + (H * 0.46) * ((row + 1) / rows);
+        const hh = h * depth;
+        g.save(); g.translate(x, y); g.scale(dir, 1);
+        if (f.dead && k > 0) {
+          g.globalAlpha = 1 - 0.45 * k;
+          g.translate(-hh * 0.1 * k, 0); g.rotate(-1.35 * k);
+          FIG[f.t](g, 0, 0, hh, k > 0.5 ? '#6b6257' : color);
+        } else FIG[f.t](g, 0, 0, hh, f.militia ? '#b7a98a' : color);
+        g.restore();
+      });
+    };
+    side(b.att, b.attAfter, 0, colors[0], -1);
+    side(b.def, b.defAfter, b.militia, colors[1], 1);
+    return per;
+  }
+  const sum5 = (u) => (u || []).reduce((a, x) => a + (x || 0), 0);
+  CC.drawBattle = drawBattle;
 
   function drawBanner(g, x, y, S, color, n, opts) {
     const w = opts.flag ? S * 0.96 : S * (n >= 100 ? 1.12 : n >= 10 ? 0.92 : 0.72), h = S * 0.56;
@@ -872,6 +968,39 @@
       for (const i of ov.landing) { const p = this.center(i); hexPath(g, p.x, p.y, S - 3); }
       g.lineWidth = 2.4; g.setLineDash([5, 4]); g.strokeStyle = 'rgba(255,215,122,0.9)'; g.stroke(); g.setLineDash([]);
     }
+    // marches queued for your next turn: dashed outlines with their number at the end
+    if (ov.queued) ov.queued.list.forEach((q, k) => {
+      g.beginPath();
+      for (const i of q.region) { const p = this.center(i); hexPath(g, p.x, p.y, S - 3); }
+      g.setLineDash([3, 4]); g.lineWidth = 2.2; g.strokeStyle = ov.queued.color; g.stroke(); g.setLineDash([]);
+      const p = this.center(q.dest), r = S * 0.3;
+      g.beginPath(); g.arc(p.x, p.y - S * 0.55, r, 0, Math.PI * 2); g.fillStyle = 'rgba(20,16,10,0.85)'; g.fill();
+      g.lineWidth = 1.6; g.strokeStyle = ov.queued.color; g.stroke();
+      g.font = `700 ${Math.round(r * 1.3)}px "Alegreya Sans", sans-serif`; g.textAlign = 'center'; g.textBaseline = 'middle';
+      g.fillStyle = '#fff6dc'; g.fillText(String(k + 1), p.x, p.y - S * 0.55 + 1);
+    });
+    // starting sites while houses choose their capitals
+    // markers keep a readable size on screen however far the map is zoomed out
+    const zk = this.cam && this.cam.z ? 1 / this.cam.z : 1;
+    for (const site of ov.sites || []) {
+      const p = this.center(site.i);
+      g.beginPath(); hexPath(g, p.x, p.y, S - 2);
+      g.fillStyle = site.sel ? 'rgba(255,215,122,0.45)' : site.ok ? 'rgba(255,215,122,0.22)' : 'rgba(30,30,30,0.18)'; g.fill();
+      g.lineWidth = site.sel ? 3.6 : 2.4; if (!site.ok) g.setLineDash([3, 4]);
+      g.strokeStyle = site.ok ? 'rgba(255,215,122,0.95)' : 'rgba(210,200,180,0.45)'; g.stroke(); g.setLineDash([]);
+      if (site.ok && S < 13 * zk) {
+        g.beginPath(); g.arc(p.x, p.y, 13 * zk, 0, Math.PI * 2);
+        g.lineWidth = (site.sel ? 4 : 2.6) * zk; g.strokeStyle = 'rgba(255,215,122,0.95)'; g.stroke();
+        g.fillStyle = site.sel ? 'rgba(255,215,122,0.5)' : 'rgba(255,215,122,0.2)'; g.fill();
+      }
+      if (site.ok) {
+        // a little tent: where a capital may rise
+        const r = Math.max(S * 0.34, 7 * zk);
+        g.beginPath(); g.moveTo(p.x - r, p.y + r * 0.6); g.lineTo(p.x, p.y - r * 0.8); g.lineTo(p.x + r, p.y + r * 0.6); g.closePath();
+        g.fillStyle = 'rgba(255,240,200,0.92)'; g.fill(); g.lineWidth = Math.max(1.2, 1.2 * zk); g.strokeStyle = 'rgba(70,50,20,0.9)'; g.stroke();
+        g.beginPath(); g.moveTo(p.x, p.y - r * 0.8); g.lineTo(p.x, p.y - r * 1.25); g.stroke();
+      }
+    }
     for (const i of ov.targets || []) {
       const p = this.center(i);
       g.beginPath(); hexPath(g, p.x, p.y, S - 2); g.lineWidth = 3; g.setLineDash([4, 3]); g.strokeStyle = 'rgba(240,110,70,0.95)'; g.stroke(); g.setLineDash([]);
@@ -884,6 +1013,13 @@
       else if (t.b === 'mine') drawMine(g, p.x, p.y, S);
       else if (t.b === 'tower') drawTower(g, p.x, p.y, S, CC.colorOf(st, t.owner));
       else if (t.b === 'port') drawDock(g, p.x, p.y, S, CC.colorOf(st, t.owner), st._nb[i].find((j) => st.tiles[j].t === 'water'), this.center.bind(this));
+    }
+    // work in progress: scaffolding where something is being built
+    for (const b of st.builds || []) {
+      if (b.tile == null) continue;
+      const p = this.center(b.tile);
+      if (p.x < x0 || p.x > x1 || p.y < y0 || p.y > y1) continue;
+      drawScaffold(g, p.x, p.y, S, CC.colorOf(st, b.owner));
     }
     for (const c of st.cities) {
       const p = this.center(c.tile);

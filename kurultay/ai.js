@@ -599,6 +599,8 @@
           for (let i = 0; i < st.tiles.length; i++) if (reach.dist[i] > 0 && !CC.fleetAt(st, i) && CC.hexDist(st, i, post.tile) < bd) { bd = CC.hexDist(st, i, post.tile); dest = i; }
         }
       }
+      // the computer cuts the trade of every house it is at war with
+      f.block = st.players.filter((P) => P.alive && P.id !== me && CC.atWar(st, me, P.id)).map((P) => P.id);
       if (dest < 0) continue;
       const rep = CC.moveFleet(st, f.id, dest);
       if (rep.error) continue;

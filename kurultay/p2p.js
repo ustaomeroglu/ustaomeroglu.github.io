@@ -194,7 +194,7 @@
         <p class="lead">Room <b style="letter-spacing:2px">${esc(code)}</b>. Choose the name of your house; you can change it in the lobby.</p>
         <div class="field"><label for="join-name">Your name</label><input id="join-name" type="text" maxlength="24" autocomplete="nickname" value="${esc(prefs.onlineName || '')}" placeholder="House …"></div>
         <p class="err" id="join-err" hidden></p></div>
-      <div class="modal-actions"><button class="btn ghost" type="button" data-close="back">Start screen instead</button><button class="btn primary" type="button" id="join-go">Join the lobby</button></div>`,
+      <div class="modal-actions"><button class="btn" type="button" data-close="back">Cancel</button><button class="btn primary" type="button" id="join-go">Join the lobby</button></div>`,
     { dismiss: false, onClose: (v) => { if (v === 'back') { history.replaceState(null, '', location.pathname); App().showSetup(); } } });
     const input = m.querySelector('#join-name'), go = m.querySelector('#join-go');
     const submit = () => {
@@ -212,6 +212,8 @@
   const SIZES = [['small', 'Small'], ['normal', 'Normal'], ['large', 'Large']];
   const MAPS = [['realm', 'Random realm'], ['world', 'Known World']];
   const ROUNDS = [[10, '10 rounds'], [15, '15 rounds'], [20, '20 rounds'], [30, '30 rounds'], [0, 'Until one house remains']];
+  const STARTS = [['random', 'Placed at random'], ['pick', 'Each house picks']];
+  const LABELS = { map: 'Map', size: 'Map size', rounds: 'Length', timer: 'Turn timer', starts: 'Starting cities' };
   const TIMERS = [[0, 'Off'], [60, '60 seconds'], [90, '90 seconds'], [120, '2 minutes'], [180, '3 minutes']];
   function lobbyModal(title) {
     App().closeAllModals();
@@ -244,8 +246,8 @@
     }).join('');
     const opt = (key, list) => {
       const v = g.settings[key];
-      if (!host) return `<div class="field"><label>${{ map: 'Map', size: 'Map size', rounds: 'Length', timer: 'Turn timer' }[key]}</label><div class="lob-val">${esc((list.find(([k]) => String(k) === String(v)) || ['', String(v)])[1])}</div></div>`;
-      return `<div class="field"><label for="lob-${key}">${{ map: 'Map', size: 'Map size', rounds: 'Length', timer: 'Turn timer' }[key]}</label><select id="lob-${key}" data-lob="set" data-key="${key}">${list.map(([k, l]) => `<option value="${k}" ${String(k) === String(v) ? 'selected' : ''}>${l}</option>`).join('')}</select></div>`;
+      if (!host) return `<div class="field"><label>${LABELS[key]}</label><div class="lob-val">${esc((list.find(([k]) => String(k) === String(v)) || ['', String(v)])[1])}</div></div>`;
+      return `<div class="field"><label for="lob-${key}">${LABELS[key]}</label><select id="lob-${key}" data-lob="set" data-key="${key}">${list.map(([k, l]) => `<option value="${k}" ${String(k) === String(v) ? 'selected' : ''}>${l}</option>`).join('')}</select></div>`;
     };
     const waiting = waitingFor(g), open = g.seats.filter((s) => !s.ai && !s.uid).length, friends = g.seats.filter((s) => !s.ai && s.uid && s.uid !== g.hostUid).length;
     const startTip = waiting.length ? `Waiting for ${waiting.map((s) => s.name).join(', ')} to be ready.` : open ? `${open} open seat${open === 1 ? '' : 's'} will be played by the computer.` : 'Everyone is ready.';
@@ -257,7 +259,7 @@
       <div class="setup-grid">
         <section><h3>Houses</h3><div class="lob-seats">${rows}</div>
           ${host && g.seats.length < 8 ? '<button type="button" class="btn small" data-lob="add">Add a house</button>' : ''}</section>
-        <section><h3>The realm</h3>${opt('map', MAPS)}${opt('size', SIZES)}${opt('rounds', ROUNDS)}${opt('timer', TIMERS)}</section>
+        <section><h3>The realm</h3>${opt('map', MAPS)}${opt('size', SIZES)}${opt('rounds', ROUNDS)}${opt('timer', TIMERS)}${opt('starts', STARTS)}</section>
       </div>
       <div class="modal-actions"><span class="estimate" style="margin-right:auto">${esc(host ? startTip : `${friends + 1} of ${g.seats.filter((s) => !s.ai).length} human seats taken.`)}</span>
         <button type="button" class="btn" data-lob="leave">${host ? 'Close the lobby' : 'Leave'}</button>
@@ -330,7 +332,7 @@
     const first = Math.max(0, cfg.players.findIndex((p) => !p.ai));
     // the start screen's houses carry over: you take the first human seat, other human seats wait for friends
     const seats = cfg.players.map((p, i) => ({ name: p.name, color: p.color, ai: i === first ? false : p.ai, flag: i === first ? p.flag || prefs.onlineFlag || null : null, uid: i === first ? me : null, ready: i === first }));
-    const settings = { map: cfg.map || 'realm', size: cfg.size || 'normal', rounds: cfg.rounds != null ? cfg.rounds : 15, timer: cfg.timer || 0, seed: cfg.seed };
+    const settings = { map: cfg.map || 'realm', size: cfg.size || 'normal', rounds: cfg.rounds != null ? cfg.rounds : 15, timer: cfg.timer || 0, starts: cfg.pickStarts ? 'pick' : 'random', seed: cfg.seed };
     await openHost(makeCode(), { seats, settings, started: false, save: null, rev: 0, hostUid: me });
   }
   async function resumeHost() {
@@ -420,7 +422,7 @@
     if (waitingFor(g).length) return;
     for (const s of g.seats) if (!s.ai && !s.uid) s.ai = true;
     const c = g.settings;
-    const st = CC.newGame({ players: g.seats.map((s) => ({ name: s.name, color: s.color, ai: s.ai, flag: s.flag || null })), size: c.size, map: c.map, rounds: c.rounds, timer: c.timer, seed: c.seed });
+    const st = CC.newGame({ players: g.seats.map((s) => ({ name: s.name, color: s.color, ai: s.ai, flag: s.flag || null })), size: c.size, map: c.map, rounds: c.rounds, timer: c.timer, pickStarts: c.starts === 'pick', seed: c.seed });
     g.started = true; g.rev = 1;
     broadcast(lobbyMsg());
     broadcast({ t: 'state', save: CC.serialize(st), rev: g.rev });
