@@ -418,7 +418,7 @@
     }
     const r = pl.res, P = s.players[s.cur];
     const mov = CC.movable(a);
-    const steppers = UN.map((d, k) => (mov[k] ? `<div class="unit-row"><div class="nm" ${tip(`${d.desc} Attack ${d.att} · defense ${d.def}.`)}>${d.name}</div>
+    const steppers = UN.map((d, k) => (mov[k] ? `<div class="unit-row"><div class="nm" ${tip(`${d.desc} Attack ${d.att} · defense ${d.def}.`)}>${ICON(d.key)}${d.name}</div>
       <div class="stepper"><button type="button" data-act="det" data-k="${k}" data-d="-1" ${gate(pl.u[k] > 0, `No ${d.name.toLowerCase()} are marching.`, `Keep one ${d.one.toLowerCase()} behind`)} aria-label="Fewer ${d.name}">−</button><output>${pl.u[k]}/${mov[k]}</output><button type="button" data-act="det" data-k="${k}" data-d="1" ${gate(pl.u[k] < mov[k], `All ${mov[k]} ${d.name.toLowerCase()} who can move are already marching.`, `Send one more ${d.one.toLowerCase()}`)} aria-label="More ${d.name}">+</button></div></div>` : '')).join('');
     const over = r.newTiles > r.cap;
     const battles = r.battles.map((b) => `<li><button type="button" data-act="focus" data-i="${b.tile}" ${tip(`Your strength ${b.A.toFixed(1)} against their ${b.D.toFixed(1)}, then each side rolls 2d6 for luck (×0.70 to ×1.30).`)}>${mark(s, b.owner)}${esc(CC.placeName(s, b.tile))}<span class="meta">${CC.sum(b.u) + b.militia} <span class="pill ${oddsClass(b.p)}">${pct(b.p)}</span></span></button></li>`).join('');
@@ -455,6 +455,25 @@
       ${danger ? '<p class="err">Enemy warships can reach these ships. Soldiers at sea barely fight back.</p>' : ''}`;
   }
 
+  // small pictures for units and buildings in the menus; a building shows the unit it trains
+  const IC = {
+    spear: '<path d="M4 16.5L14 6.5" stroke="#8a5a2a" stroke-width="2" stroke-linecap="round"/><path d="M12.6 5.2L17.2 2.8 14.8 7.4z" fill="#8d939a" stroke="#1d1812" stroke-width=".8" stroke-linejoin="round"/>',
+    archer: '<path d="M6.5 2.5Q15 10 6.5 17.5" fill="none" stroke="#8a5a2a" stroke-width="2" stroke-linecap="round"/><path d="M6.5 2.5v15" stroke="#1d1812" stroke-width=".7"/><path d="M3.5 10h11" stroke="#1d1812" stroke-width="1.3"/><path d="M17.2 10l-3.2-2.1v4.2z" fill="#6f747b" stroke="#1d1812" stroke-width=".6"/><path d="M3.8 10l-1.4-1.6M3.8 10l-1.4 1.6" stroke="#b5462f" stroke-width="1.1"/>',
+    knight: '<path d="M5.5 17.5h9.5l-1.2-4.2c2.2-1.2 3.2-3.6 2.1-6.4L12.8 3.6 12 5 10.8 3.8C7.6 5 5.2 8.2 4.4 11.6l2.2 1 2.2-2.1 1 1.1z" fill="#c9a26b" stroke="#1d1812" stroke-width=".9" stroke-linejoin="round"/><circle cx="12.6" cy="7.2" r=".9" fill="#1d1812"/>',
+    sword: '<path d="M10 1.8l1.7 2.2v9H8.3V4z" fill="#a9afb6" stroke="#1d1812" stroke-width=".8" stroke-linejoin="round"/><path d="M5.8 13.2h8.4" stroke="#d7a646" stroke-width="2.2" stroke-linecap="round"/><path d="M10 14.4v3.8" stroke="#7a5428" stroke-width="2" stroke-linecap="round"/>',
+    cannon: '<path d="M2.8 11.6l11.4-4.4 1.6 3.8L4.6 14.8z" fill="#6f747b" stroke="#1d1812" stroke-width=".9" stroke-linejoin="round"/><circle cx="8" cy="14.6" r="3.1" fill="#7a5428" stroke="#1d1812" stroke-width=".9"/><circle cx="8" cy="14.6" r=".9" fill="#1d1812"/>',
+    warship: '<path d="M2.5 12.5h15l-2.6 4H5.1z" fill="#6b4a2c" stroke="#1d1812" stroke-width=".8"/><path d="M6 13.8h1.4M9.3 13.8h1.4M12.6 13.8H14" stroke="#1d1812" stroke-width="1.2"/><path d="M10 2.5v10" stroke="#1d1812" stroke-width="1.1"/><path d="M10.6 3Q16 7.5 10.6 12z" fill="#c9483a" stroke="#1d1812" stroke-width=".8"/>',
+    merchant: '<path d="M2.5 12.5h15l-2.6 4H5.1z" fill="#6b4a2c" stroke="#1d1812" stroke-width=".8"/><path d="M10 2.5v10" stroke="#1d1812" stroke-width="1.1"/><path d="M10.6 3Q16 7.5 10.6 12z" fill="#efe4c8" stroke="#1d1812" stroke-width=".8"/><circle cx="5.6" cy="10.4" r="2" fill="#e9b824" stroke="#7a5810" stroke-width=".8"/>',
+    farm: '<path d="M10 18V5" stroke="#d7a646" stroke-width="1.4"/><g fill="#e9c35a" stroke="#8a6a1c" stroke-width=".6"><ellipse cx="8" cy="6.5" rx="1.4" ry="2.4" transform="rotate(-25 8 6.5)"/><ellipse cx="12" cy="6.5" rx="1.4" ry="2.4" transform="rotate(25 12 6.5)"/><ellipse cx="8" cy="10.5" rx="1.4" ry="2.4" transform="rotate(-25 8 10.5)"/><ellipse cx="12" cy="10.5" rx="1.4" ry="2.4" transform="rotate(25 12 10.5)"/><ellipse cx="10" cy="3.4" rx="1.2" ry="2"/></g>',
+    mine: '<path d="M4.2 17L13 8.2" stroke="#b08550" stroke-width="2" stroke-linecap="round"/><path d="M7.5 4.2Q14 2.8 17 9.5Q13.2 6.4 7.5 4.2z" fill="#a3a9b0" stroke="#1d1812" stroke-width=".8" stroke-linejoin="round"/><path d="M14.5 15.5l1.6-1.6 1.6 1.6-1.6 1.6z" fill="#e9b824" stroke="#7a5810" stroke-width=".6"/>',
+    outpost: '<path d="M6.2 18V8.4h7.6V18z" fill="#bca57c" stroke="#1d1812" stroke-width=".9"/><path d="M5.2 8.4V5h2v1.6h1.8V5h2v1.6h1.8V5h2v3.4z" fill="#bca57c" stroke="#1d1812" stroke-width=".9" stroke-linejoin="round"/><path d="M8.8 18v-3.2a1.2 1.2 0 0 1 2.4 0V18" fill="#1d1812"/>',
+    castle: '<path d="M2.8 18V7.5h4v3h6.4v-3h4V18z" fill="#bca57c" stroke="#1d1812" stroke-width=".9" stroke-linejoin="round"/><path d="M2.8 7.5V5.2h1.3v1h1.4v-1h1.3v2.3M13.2 7.5V5.2h1.3v1h1.4v-1h1.3v2.3" fill="none" stroke="#1d1812" stroke-width=".9"/><path d="M8.4 18v-3.6a1.6 1.6 0 0 1 3.2 0V18" fill="#1d1812"/><path d="M10 10.5V3.2" stroke="#1d1812" stroke-width=".8"/><path d="M10.2 3.2h3.4l-1 1.2 1 1.2h-3.4z" fill="#d7a646"/>',
+    port: '<circle cx="10" cy="4.4" r="1.8" fill="none" stroke="#2f5f86" stroke-width="1.6"/><path d="M10 6.4V17M6.4 8.8h7.2M4 11.8Q5 17 10 17t6-5.2" fill="none" stroke="#2f5f86" stroke-width="1.8" stroke-linecap="round"/>',
+    walls: '<path d="M2.5 18V8.5h2V6.6h2.2v1.9h2.2V6.6h2.2v1.9h2.2V6.6h2.2v1.9h2V18z" fill="#bca57c" stroke="#1d1812" stroke-width=".9" stroke-linejoin="round"/><path d="M2.5 11.6h15M2.5 14.8h15M6.2 8.5v3.1M13.8 8.5v3.1M10 11.6v3.2M6.2 14.8V18M13.8 14.8V18" stroke="#1d1812" stroke-width=".6"/>',
+    market: '<path d="M3 9h14l-1.4-4H4.4z" fill="#c9483a" stroke="#1d1812" stroke-width=".8" stroke-linejoin="round"/><path d="M4 9v8.5h12V9" fill="#bca57c" stroke="#1d1812" stroke-width=".8"/><circle cx="10" cy="13.3" r="2.6" fill="#e9b824" stroke="#7a5810" stroke-width=".8"/>',
+  };
+  IC.harbor = IC.port; IC.stables = IC.knight; IC.barracks = IC.sword; IC.foundry = IC.cannon; IC.tower = IC.outpost;
+  const ICON = (k) => (IC[k] ? `<svg class="ico" viewBox="-2 -2 24 24" width="24" height="24" aria-hidden="true">${IC[k]}</svg>` : '');
   const sendN = (f) => (App.fleetN && App.fleetN.id === f.id ? Math.max(1, Math.min(f.n, App.fleetN.n)) : f.n);
   function shipGlyph(color) { return `<svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M2 10h12l-2 3H4z" fill="#5a3d22" stroke="#1d1812"/><path d="M8 2v8" stroke="#1d1812"/><path d="M8.5 2.5Q13 6 8.5 9.5z" fill="${color}" stroke="#1d1812" stroke-width=".8"/></svg>`; }
 
@@ -512,7 +531,7 @@
       const rows = UN.map((d, k) => [k, tr.u[k], tr.u[k] === 1 ? d.one : d.name, d.cost]).filter((x) => x[1])
         .concat(tr.ships ? [['ships', tr.ships, tr.ships === 1 ? 'Warship' : 'Warships', RULES.shipCost]] : [])
         .concat(tr.merchants ? [['merchants', tr.merchants, tr.merchants === 1 ? 'Merchant ship' : 'Merchant ships', RULES.merchantCost]] : []);
-      html += `<h3 ${tip('Recruits train for a turn. They join the garrison, ready to march, at the start of your next turn. If the town falls first, they are lost.')}>In training · ready next turn</h3><div class="buy-list">${rows.map(([k, n, name, cost]) => `<div class="buy"><div class="nm">${n} ${name}</div>
+      html += `<h3 ${tip('Recruits train for a turn. They join the garrison, ready to march, at the start of your next turn. If the town falls first, they are lost.')}>In training · ready next turn</h3><div class="buy-list">${rows.map(([k, n, name, cost]) => `<div class="buy"><div class="nm">${ICON(k === 'ships' ? 'warship' : k === 'merchants' ? 'merchant' : UN[k].key)}${n} ${name}</div>
         ${own ? `<div class="btns"><button class="btn small" type="button" data-act="untrain" data-k="${k}" data-n="1" ${tip(`Cancel one and get ${cost} gold back`)}>−1</button>${n > 1 ? `<button class="btn small" type="button" data-act="untrain" data-k="${k}" ${tip(`Cancel all ${n} and get ${cost * n} gold back`)}>Cancel all</button>` : ''}</div>` : ''}</div>`).join('')}</div>`;
     }
     if (!own) return html;
@@ -526,15 +545,15 @@
         const r1 = CC.canRecruit(s, s.cur, c.id, k, 1);
         const n5 = Math.min(5, Math.max(1, left));
         const r5 = CC.canRecruit(s, s.cur, c.id, k, n5);
-        html += `<div class="buy"><div class="nm" ${tip(`${d.desc} Attack ${d.att} · defense ${d.def} · upkeep ${d.upkeep}.`)}>${d.name} <span class="cost">${d.cost}g</span></div>
+        html += `<div class="buy"><div class="nm" ${tip(`${d.desc} Attack ${d.att} · defense ${d.def} · upkeep ${d.upkeep}.`)}>${ICON(d.key)}${d.name} <span class="cost">${d.cost}g</span></div>
           <div class="btns"><button class="btn small" type="button" data-act="recruit" data-k="${k}" data-n="1" ${gate(r1.ok, r1.reason, `Train 1 for ${r1.cost} gold, ready next turn`)}>+1</button>
           ${n5 > 1 ? `<button class="btn small" type="button" data-act="recruit" data-k="${k}" data-n="${n5}" ${gate(r5.ok, r5.reason, `Train ${n5} for ${r5.cost} gold, ready next turn`)}>+${n5}</button>` : ''}</div></div>`;
       });
       if (CC.isCoastal(s, c.tile)) {
         const w = CC.canRecruitShips(s, s.cur, c.id, 1), m = CC.canRecruitShips(s, s.cur, c.id, 1, 'merchant');
-        html += `<div class="buy"><div class="nm" ${tip(WARSHIP_TIP())}>Warship <span class="cost">${RULES.shipCost}g</span></div>
+        html += `<div class="buy"><div class="nm" ${tip(WARSHIP_TIP())}>${ICON('warship')}Warship <span class="cost">${RULES.shipCost}g</span></div>
           <div class="btns"><button class="btn small" type="button" data-act="ships" data-n="1" ${gate(w.ok, w.reason, `Build a warship for ${w.cost} gold, at sea next turn`)}>+1</button></div></div>
-          <div class="buy"><div class="nm" ${tip(MERCHANT_TIP())}>Merchant ship <span class="cost">${RULES.merchantCost}g</span></div>
+          <div class="buy"><div class="nm" ${tip(MERCHANT_TIP())}>${ICON('merchant')}Merchant ship <span class="cost">${RULES.merchantCost}g</span></div>
           <div class="btns"><button class="btn small" type="button" data-act="ships" data-kind="merchant" data-n="1" ${gate(m.ok, m.reason, `Build a merchant ship for ${m.cost} gold, at sea next turn`)}>+1</button></div></div>`;
       }
       html += '</div>';
@@ -552,10 +571,10 @@
         if (kind === 'harbor' && !CC.isCoastal(s, c.tile)) continue;
         const info = CC.upgradeInfo(s, s.cur, c.id, kind);
         const work = CC.pendingIn(s, c.id, kind);
-        if (work) { html += `<div class="buy"><div class="nm">${name} · <span class="ok">being built · ready next turn</span></div><button class="btn small" type="button" data-act="unbuild" data-id="${work.id}" ${tip(`Cancel and get ${work.cost} gold back`)}>Cancel</button></div>`; continue; }
+        if (work) { html += `<div class="buy"><div class="nm">${ICON(kind)}${name} · <span class="ok">being built · ready next turn</span></div><button class="btn small" type="button" data-act="unbuild" data-id="${work.id}" ${tip(`Cancel and get ${work.cost} gold back`)}>Cancel</button></div>`; continue; }
         const done = info.max != null && info.level >= info.max;
         const lvl = kind === 'walls' || kind === 'market' ? ` ${info.level}/${info.max}` : '';
-        html += `<div class="buy"><div class="nm" ${tip(done ? info.reason : desc)}>${name}${lvl}${done ? ' <span class="ok">✓</span>' : ` <span class="cost">${info.cost}g</span>`}</div>
+        html += `<div class="buy"><div class="nm" ${tip(done ? info.reason : desc)}>${ICON(kind)}${name}${lvl}${done ? ' <span class="ok">✓</span>' : ` <span class="cost">${info.cost}g</span>`}</div>
           ${done ? '' : `<button class="btn small" type="button" data-act="upgrade" data-kind="${kind}" ${gate(info.ok, info.reason, `${desc}. ${info.cost} gold.`)}>Build</button>`}</div>`;
       }
       html += '</div>';
@@ -589,13 +608,13 @@
     if (t.b !== 'port' || t.owner !== s.cur) return '';
     const d = CC.portOf(s, i), tr = CC.training(d), own = myTurn();
     let html = '<h3>Port</h3><p class="hint-text">Warships are built here, armies standing here can board ships, and sea trade can come home here.</p>';
-    if (tr.ships) html += `<div class="buy-list"><div class="buy"><div class="nm">${tr.ships} warship${tr.ships === 1 ? '' : 's'} on the slipway · ready next turn</div>${own ? `<div class="btns"><button class="btn small" type="button" data-act="unpship" data-tile="${i}" ${tip(`Cancel one and get ${RULES.shipCost} gold back`)}>−1</button></div>` : ''}</div></div>`;
-    if (tr.merchants) html += `<div class="buy-list"><div class="buy"><div class="nm">${tr.merchants} merchant ship${tr.merchants === 1 ? '' : 's'} on the slipway · ready next turn</div>${own ? `<div class="btns"><button class="btn small" type="button" data-act="unpship" data-kind="merchant" data-tile="${i}" ${tip(`Cancel one and get ${RULES.merchantCost} gold back`)}>−1</button></div>` : ''}</div></div>`;
+    if (tr.ships) html += `<div class="buy-list"><div class="buy"><div class="nm">${ICON('warship')}${tr.ships} warship${tr.ships === 1 ? '' : 's'} on the slipway · ready next turn</div>${own ? `<div class="btns"><button class="btn small" type="button" data-act="unpship" data-tile="${i}" ${tip(`Cancel one and get ${RULES.shipCost} gold back`)}>−1</button></div>` : ''}</div></div>`;
+    if (tr.merchants) html += `<div class="buy-list"><div class="buy"><div class="nm">${ICON('merchant')}${tr.merchants} merchant ship${tr.merchants === 1 ? '' : 's'} on the slipway · ready next turn</div>${own ? `<div class="btns"><button class="btn small" type="button" data-act="unpship" data-kind="merchant" data-tile="${i}" ${tip(`Cancel one and get ${RULES.merchantCost} gold back`)}>−1</button></div>` : ''}</div></div>`;
     if (own) {
       const w = CC.canPortShips(s, s.cur, i, 1), m = CC.canPortShips(s, s.cur, i, 1, 'merchant');
-      html += `<div class="buy-list"><div class="buy"><div class="nm" ${tip(WARSHIP_TIP())}>Warship <span class="cost">${RULES.shipCost}g</span></div>
+      html += `<div class="buy-list"><div class="buy"><div class="nm" ${tip(WARSHIP_TIP())}>${ICON('warship')}Warship <span class="cost">${RULES.shipCost}g</span></div>
         <div class="btns"><button class="btn small" type="button" data-act="pships" data-tile="${i}" ${gate(w.ok, w.reason, `Build a warship for ${w.cost} gold, at sea next turn`)}>+1</button></div></div>
-        <div class="buy"><div class="nm" ${tip(MERCHANT_TIP())}>Merchant ship <span class="cost">${RULES.merchantCost}g</span></div>
+        <div class="buy"><div class="nm" ${tip(MERCHANT_TIP())}>${ICON('merchant')}Merchant ship <span class="cost">${RULES.merchantCost}g</span></div>
         <div class="btns"><button class="btn small" type="button" data-act="pships" data-kind="merchant" data-tile="${i}" ${gate(m.ok, m.reason, `Build a merchant ship for ${m.cost} gold, at sea next turn`)}>+1</button></div></div></div>`;
     }
     return html;
@@ -607,14 +626,14 @@
     const work = CC.pendingAt(s, i);
     if (work && work.owner === s.cur) {
       const names = { farm: 'Farm', mine: 'Gold mine', outpost: 'Outpost', castle: 'Castle', port: 'Port' };
-      return `<h3>Being built</h3><div class="buy-list"><div class="buy"><div class="nm">${names[work.kind] || work.kind} · <span class="ok">ready next turn</span></div>${myTurn() ? `<button class="btn small" type="button" data-act="unbuild" data-id="${work.id}" ${tip(`Cancel and get ${work.cost} gold back`)}>Cancel</button>` : ''}</div></div>`;
+      return `<h3>Being built</h3><div class="buy-list"><div class="buy"><div class="nm">${ICON(work.kind)}${names[work.kind] || work.kind} · <span class="ok">ready next turn</span></div>${myTurn() ? `<button class="btn small" type="button" data-act="unbuild" data-id="${work.id}" ${tip(`Cancel and get ${work.cost} gold back`)}>Cancel</button>` : ''}</div></div>`;
     }
     if (!(t.owner === s.cur && myTurn())) return '';
     if (t.b) {
       const names = { farm: 'farm', mine: 'gold mine', tower: 'outpost', port: 'port' };
       if (!names[t.b]) return '';
       const r = CC.canDismantle(s, s.cur, i);
-      return `<h3>Rebuild</h3><div class="buy-list"><div class="buy"><div class="nm" ${tip('Pull it down to build something else here. No gold comes back.')}>Pull down the ${names[t.b]}</div>
+      return `<h3>Rebuild</h3><div class="buy-list"><div class="buy"><div class="nm" ${tip('Pull it down to build something else here. No gold comes back.')}>${ICON(t.b)}Pull down the ${names[t.b]}</div>
         <button class="btn small" type="button" data-act="dismantle" data-tile="${i}" ${gate(r.ok, r.reason, 'Pull it down now, then build something else here (no gold back)')}>Pull down</button></div></div>`;
     }
     const fs = CC.farmSlots(s, s.cur);
@@ -631,7 +650,7 @@
       if (kind === 'farm' && t.gold) continue;
       if (kind === 'port' && !s._nb[i].some((j) => s.tiles[j].t === 'water')) continue;
       const r = CC.canBuild(s, s.cur, i, kind);
-      html += `<div class="buy"><div class="nm" ${tip(desc)}>${name} <span class="cost">${r.cost}g</span></div>
+      html += `<div class="buy"><div class="nm" ${tip(desc)}>${ICON(kind)}${name} <span class="cost">${r.cost}g</span></div>
         <button class="btn small" type="button" data-act="build" data-kind="${kind}" data-tile="${i}" ${gate(r.ok, r.reason, `${desc} ${r.cost} gold.`)}>Build</button></div>`;
     }
     return html + '</div>';
@@ -2029,8 +2048,9 @@
   }
 
   // ------------------------------------------------------------ tutorial coach
-  // A short practice game on a fixed map: one rival, a weak rebel town five tiles from your capital.
-  const TUT_SEED = 21, TUT_TOWN = 'Dragonmere';
+  // A short practice game on a fixed map: one rival far away, a weak rebel town six tiles from your capital,
+  // a capital on the coast for a harbor, and a trading post a few tiles out to sea.
+  const TUT_SEED = 128, TUT_GEN = 5, TUT_TOWN = 'Stonebury';
   const Coach = { on: false, step: 0, base: null, marks: [] };
 
   function startTutorial() {
@@ -2038,16 +2058,23 @@
     closeAllModals();
     const st = CC.newGame({
       players: [{ name: 'House Varn', color: 0, ai: false }, { name: 'House Aldane', color: 1, ai: true }],
-      size: 'small', rounds: 10, seed: TUT_SEED, tutorial: true, gen: 1,
+      size: 'small', rounds: 12, seed: TUT_SEED, tutorial: true, gen: TUT_GEN, fixedStarts: true,
     });
-    // keep the first battle winnable: the practice town has a single rebel spearman
-    const town = st.cities.find((c) => c.name === TUT_TOWN);
-    const g = town && CC.armyAt(st, town.tile);
-    if (g) g.u = CC.normU([1]);
+    // keep the first battle winnable: the nearest rebel town has no walls and a single spearman
+    const cap = st.cities[st.players[0].capital];
+    const town = st.cities.filter((c) => c.owner < 0).sort((a, b) => CC.hexDist(st, a.tile, cap.tile) - CC.hexDist(st, b.tile, cap.tile))[0];
+    if (town) {
+      town.name = TUT_TOWN; town.walls = 0;
+      const g = CC.armyAt(st, town.tile);
+      if (g) g.u = CC.normU([1]);
+    }
+    // enough gold to try everything in the first two turns: a farm, stables, a harbor, soldiers, a knight and a ship
+    st.players[0].gold = 260;
     startLoaded(st, null);
   }
 
   const tutCap = () => { const s = App.st, c = s.cities.find((x) => x.owner === 0 && x.capital) || s.cities.find((x) => x.owner === 0); return c ? c.tile : -1; };
+  const tutCapCity = () => { const t = tutCap(); return t >= 0 ? CC.cityAt(App.st, t) : null; };
   function tutTown() {
     const s = App.st, cap = tutCap();
     return s.cities.find((c) => c.name === TUT_TOWN && c.owner !== 0) ||
@@ -2057,7 +2084,7 @@
     const s = App.st;
     const sel = App.plan && CC.getArmy(s, App.plan.armyId);
     if (sel && sel.owner === 0) return sel;
-    return s.armies.filter((a) => a.owner === 0 && canMove(a)).sort((x, y) => CC.sum(y.u) - CC.sum(x.u))[0] || null;
+    return s.armies.filter((a) => a.owner === 0 && canMove(a) && !a.sea).sort((x, y) => CC.sum(y.u) - CC.sum(x.u))[0] || null;
   }
   // first tiles on the road from the army to the town that it can claim this turn
   function tutPathTiles(all) {
@@ -2081,19 +2108,29 @@
     }
     return best;
   }
+  // the trading post nearest your capital
+  function tutPost() {
+    const s = App.st, cap = tutCap();
+    return (s._posts || []).slice().sort((a, b) => CC.hexDist(s, a.tile, cap) - CC.hexDist(s, b.tile, cap))[0] || null;
+  }
   const tutSoldiers = () => CC.summary(App.st, 0).soldiers;
   const tutP = () => App.st.players[0];
+  const tutBuilt = (kind) => { const c = tutCapCity(); return !!(c && (c[kind] || (App.st.builds || []).some((b) => b.owner === 0 && b.kind === kind && b.city === c.id))); };
+  const tutKnights = () => App.st.armies.reduce((n, a) => n + (a.owner === 0 ? a.u[2] || 0 : 0), 0) + App.st.cities.reduce((n, c) => n + (c.owner === 0 ? CC.training(c).u[2] : 0), 0);
+  const tutMerchants = () => App.st.fleets.filter((f) => f.owner === 0 && CC.isMerchant(f)).length + App.st.cities.reduce((n, c) => n + (c.owner === 0 ? CC.training(c).merchants : 0), 0);
+  const tutAtPost = () => App.st.fleets.some((f) => f.owner === 0 && (App.st._posts || []).some((p) => p.tile === f.tile));
+  const tutTab = (tab) => `[data-act="ctab"][data-tab="${tab}"]`;
 
   const STEPS = [
     { title: 'Welcome to your realm', next: 'Show me',
-      body: () => 'You are <b>House Varn</b>, in red. The castle with the gold crown is your capital, and everything inside the red border is your land. Every turn you <b>claim land</b>, <b>build</b>, <b>recruit</b> and <b>fight</b>. This short game walks you through all four.',
+      body: () => 'You are <b>House Varn</b>, in red. The castle with the gold crown is your capital, and everything inside the red border is your land. Every turn you <b>claim land</b>, <b>build</b>, <b>recruit</b> and <b>fight</b>, and your coast opens the sea to you. This short game shows you each of them.',
       marks: () => [tutCap()] },
     { title: 'Pick up your army',
       body: () => 'Click the <b>red banner</b> on your castle. The number on it is how many soldiers stand there. (Clicking the castle and then <b>Command the garrison</b> works too.)',
       done: () => { const a = App.plan && CC.getArmy(App.st, App.plan.armyId); return !!(a && a.owner === 0); },
       marks: () => [tutCap()] },
     { title: 'Paint the land you want',
-      body: () => `Now <b>click or drag across the gold outline</b>, just outside your border, on the road toward ${esc(TUT_TOWN)}. Painted tiles get a hatch, and the flag marks where your army will stop. Darkened tiles are too far to reach this turn. Forests, hills and rivers slow an army down, so it only gets this far today.`,
+      body: () => `Now <b>click or drag across the gold outline</b>, just outside your border, on the road toward ${esc(TUT_TOWN)}. Painted tiles get a hatch, and the flag marks where your army will stop. Darkened tiles are too far to reach this turn. (Later, a <b>right-click</b> on a tile paints the way and marches in one go.)`,
       done: () => !!(App.plan && App.plan.res && App.plan.res.newTiles >= 1) || tutP().stats.taken > 0,
       marks: () => tutPathTiles(false) },
     { title: 'March!',
@@ -2101,23 +2138,47 @@
       done: () => tutP().stats.taken > 0,
       glow: '[data-act="march"]', marks: () => [] },
     { title: 'Build a farm',
-      body: () => 'Farms pay gold every turn. Click the <b>green plains tile</b> outlined in gold inside your border, then press <b>Build</b> next to Farm. You may build 1 farm per 5 tiles you hold, so more land means more farms. It is finished at the start of your next turn.',
+      body: () => 'Farms pay gold every turn. Click the <b>green plains tile</b> outlined in gold inside your border, then press <b>Build</b> next to Farm. You may build 1 farm per 5 tiles you hold. Like every building, it is finished at the start of your next turn.',
       done: () => CC.farmSlots(App.st, 0).farms >= 1,
       glow: '[data-act="build"][data-kind="farm"]', marks: () => [tutFarmTile()] },
+    { title: 'Build stables',
+      body: () => 'Knights, the strongest soldiers, need <b>Stables</b>. Click your <b>castle</b>, open the <b>Build</b> tab and press <b>Build</b> next to Stables (the horse). Barracks and a Foundry unlock swordsmen and cannons the same way.',
+      done: () => tutBuilt('stables'),
+      glow: `${tutTab('build')}, [data-act="upgrade"][data-kind="stables"]`, marks: () => [tutCap()] },
+    { title: 'Build a harbor',
+      body: () => 'Your capital stands on the sea. In the same <b>Build</b> tab, press <b>Build</b> next to <b>Harbor</b> (the anchor). A harbor launches ships, lets armies board them, and brings trade from overseas home.',
+      done: () => tutBuilt('harbor'),
+      glow: `${tutTab('build')}, [data-act="upgrade"][data-kind="harbor"]`, marks: () => [tutCap()] },
     { title: 'Recruit soldiers',
-      body: () => 'Click your <b>castle</b>, then press <b>+5</b> next to Spearmen. Soldiers cost gold now and a little upkeep every turn. They train for a turn and join your garrison at the start of your next turn.',
+      body: () => 'Open the <b>Recruit</b> tab and press <b>+5</b> next to Spearmen. Soldiers cost gold now and a little upkeep every turn. They train for a turn and join your garrison at the start of your next turn.',
       done: () => tutSoldiers() + CC.trainingOf(App.st, 0) > Coach.base.soldiers,
-      glow: '[data-act="recruit"][data-k="0"]', marks: () => [tutCap()] },
+      glow: `${tutTab('recruit')}, [data-act="recruit"][data-k="0"]`, marks: () => [tutCap()] },
     { title: 'End your turn',
-      body: () => 'Press <b>End turn</b> at the top right. Your rival, House Aldane, moves somewhere far away. Then you collect gold from your castle and farms, and get fresh marching orders.',
+      body: () => 'Press <b>End turn</b> at the top right. Your rival, House Aldane, moves somewhere far away. Then you collect gold, your new soldiers step out, and the farm, stables and harbor are finished.',
       done: () => App.st.round > Coach.base.round && myTurn(),
       glow: '#btn-end', marks: () => [] },
     { title: `Take ${TUT_TOWN}`,
-      body: () => `The grey castle outlined in gold is <b>${esc(TUT_TOWN)}</b>, held by rebels. Towns give gold, recruits and an extra marching order. Click your army at the ford, then <b>paint a path that ends on the town</b>. The swords marker shows your chance to win. The town sits on a hill behind a river, which helps its defenders, so check the odds before you attack. Green is good; red means bring more soldiers first.`,
+      body: () => `The grey castle outlined in gold is <b>${esc(TUT_TOWN)}</b>, held by rebels. Towns give gold, recruits and an extra marching order. Click your army on the road, then <b>paint a path that ends on the town</b> (or right-click the town). The swords marker shows your chance to win: green is good, red means bring more soldiers first. A march that takes a town ends inside it.`,
       done: () => tutP().stats.won + tutP().stats.lost > Coach.base.battles,
       marks: () => { const t = tutTown(); return t ? [t.tile] : []; } },
+    { title: 'Train a knight',
+      body: () => 'The stables are ready. Click your <b>castle</b> and, in the <b>Recruit</b> tab, press <b>+1</b> next to Knights. Knights hit hard and ride 7 steps a turn, but cost more.',
+      done: () => tutKnights() > Coach.base.knights,
+      glow: `${tutTab('recruit')}, [data-act="recruit"][data-k="2"]`, marks: () => [tutCap()] },
+    { title: 'Launch a merchant ship',
+      body: () => 'The harbor is ready too. In the same tab press <b>+1</b> next to <b>Merchant ship</b>. Merchant ships earn the full gold of a trading post; warships fight, block trade and bombard the shore, but earn only half at a post.',
+      done: () => tutMerchants() > 0,
+      glow: '[data-act="ships"][data-kind="merchant"]', marks: () => [tutCap()] },
+    { title: 'End your turn again',
+      body: () => 'Press <b>End turn</b>. Your knight and your ship are ready at the start of your next turn.',
+      done: () => App.st.round > Coach.base.round && myTurn(),
+      glow: '#btn-end', marks: () => [] },
+    { title: 'Sail to the trading post',
+      body: () => { const p = tutPost(); return `Out at sea, the gold anchor is a <b>trading post</b>${p ? `, ${esc(p.name)}, worth +${p.value} gold a turn` : ''}. Click your <b>ship</b> by the harbor, then <b>right-click the post</b> to sail there at once. Its first turn there is spent setting up trade; after that it pays every turn while it stays and the sea route home is open.`; },
+      done: () => tutAtPost(),
+      marks: () => { const p = tutPost(); return p ? [p.tile] : []; } },
     { title: 'You know the basics', next: 'Finish',
-      body: () => `${tutP().stats.won ? 'Victory! ' : 'Battles are numbers plus dice, and this one went against you. '}From here, keep the loop going: claim land, put farms on plains and <b>mines on gold deposits</b> (the gold diamonds), post soldiers on them as guards, and take towns. Each town's panel has walls, markets, harbors for ships, and stables for knights. Most points after round 10 wins. <b>Rules</b> at the top has the details.`,
+      body: () => `${tutP().stats.won ? 'Victory! ' : 'Battles are numbers plus dice, and this one went against you. '}From here, keep the loop going: claim land, put farms on plains and <b>mines on gold deposits</b> (the gold diamonds), take towns, and keep ships on the trading posts. Click any farm, mine, outpost or port of yours to pull it down and build something else. Most points after the last round wins. <b>Rules</b> at the top has the details.`,
       marks: () => [] },
   ];
 
@@ -2138,7 +2199,7 @@
 
   function coachBase() {
     const s = App.st, P = s.players[0];
-    return { taken: P.stats.taken, soldiers: tutSoldiers(), battles: P.stats.won + P.stats.lost, round: s.round };
+    return { taken: P.stats.taken, soldiers: tutSoldiers(), battles: P.stats.won + P.stats.lost, round: s.round, knights: tutKnights() };
   }
   function coachStart(step) {
     Coach.on = true; Coach.step = step || 0; Coach.base = coachBase();
