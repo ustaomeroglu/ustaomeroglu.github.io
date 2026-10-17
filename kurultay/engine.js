@@ -89,7 +89,7 @@
     'Tamsworth', 'Wardenfell', 'Amberley', 'Burnholt', 'Crowmere', 'Dovecote', 'Fennick', 'Gallowmere', 'Hartwell'];
 
   const SIZES = { small: 0.75, normal: 1, large: 1.3 };   // games saved before map scales were stored
-  const SIZE_SCALE = { small: 0.6, normal: 1, large: 1.6 }; // new games: clearly different sizes
+  const SIZE_SCALE = { small: 0.4, normal: 0.6, large: 1 }; // new games: clearly different sizes (saves keep their own scale)
 
   // ---------------------------------------------------------------- RNG
   function mulberry32(seed) {
@@ -206,7 +206,9 @@
       // the sketch is twice as wide as it is tall; hex rows are 0.866 high
       // drawn larger than a random realm so the coasts read as Europe, with towns to match
       const aspect = (64 / WORLD_SH) * 0.866;
-      const H = Math.max(30, Math.round(Math.sqrt((land * 1.45) / WORLD_LAND / aspect)));
+      // the smallest Known World: 30 rows before gen 6; since then it shrinks and grows with the map size too
+      const minH = gen >= 6 ? Math.max(22, Math.round(30 * Math.sqrt(mul / 0.6))) : 30;
+      const H = Math.max(minH, Math.round(Math.sqrt((land * 1.45) / WORLD_LAND / aspect)));
       return { W: Math.round(H * aspect), H, mul: mul * 1.35 };
     }
     const total = land / (gen >= 3 ? 0.5 : 0.6);
@@ -217,7 +219,7 @@
 
   // gen 1: the original maps (kept so older saves rebuild exactly); gen 2: lakes, inland seas and distant markets;
   // gen 3: more ocean and an inland sea opening onto it through a strait. kind 'world': the Known World sketch.
-  const MAP_GEN = 5;
+  const MAP_GEN = 6;
   function generateMap(np, size, seed, gen, kind) {
     for (let k = 0; k < 40; k++) {
       const s = (seed + k * 7919) >>> 0;
@@ -408,7 +410,7 @@
     for (let i = 0; i < N; i++) variation.push(rng());
 
     let posts = [], regions = [], lanes = [];
-    if (world) ({ posts, regions, lanes } = colonyPosts(W, H, nb, t, shape.col));
+    if (world) ({ posts, regions, lanes } = colonyPosts(W, H, nb, t, shape.col, gen >= 6 ? worldPostPick(np, mul) : null));
     else if (gen >= 2) { posts = placeMarkets(W, H, nb, t, np, seed); lanes = realmLanes(W, H, nb, t, posts, seed); }
     return { W, H, seed, gen, kind: world ? 'world' : 'realm', t, river, gold, elev: Array.from(elev), variation, rivers, starts, neutrals, names, posts, regions, lanes, nb6, nb };
   }
@@ -667,14 +669,28 @@
     return best;
   }
   // one trading post per colony: the ocean tile on its coast nearest the sketch's port
-  function colonyPosts(W, H, nb, t, col) {
-    const N = W * H, ocean = oceanMask(W, H, nb, t), posts = [], regions = [], postOf = {};
+  // gen 6: fewer trading posts for fewer houses and smaller maps (all 18 for 8 houses on a normal map), taken in
+  // turn from the western and the eastern distant lands, so both sides of the map keep their share
+  const POSTS_WEST = ['the Caribbean', 'the Gold Coast', 'Brazil', 'Newfoundland', 'Senegal', 'the River Plate', 'New Spain', 'New England', 'Bahia'];
+  const POSTS_EAST = ['Calicut', 'Canton', 'Aden', 'Bengal', 'Zanzibar', 'Peking', 'Hormuz', 'Gujarat', 'Tartary'];
+  function worldPostPick(np, mul) {
+    const all = POSTS_WEST.length + POSTS_EAST.length;
+    const want = Math.max(6, Math.min(all, Math.round(all * Math.sqrt(np / 8) * Math.pow(mul / (0.6 * 1.35), 0.4))));
+    const order = [];
+    for (let k = 0; k < Math.max(POSTS_WEST.length, POSTS_EAST.length); k++) order.push(POSTS_WEST[k], POSTS_EAST[k]);
+    return new Set(order.filter(Boolean).slice(0, want));
+  }
+  // keep: names of the posts this map has (null: all). Posts left out still anchor the sea lanes that run past them.
+  function colonyPosts(W, H, nb, t, col, keep) {
+    const N = W * H, ocean = oceanMask(W, H, nb, t), posts = [], regions = [], postOf = {}, taken = new Set();
     SK.colonies.forEach((c, ci) => {
       const tiles = []; for (let i = 0; i < N; i++) if (col[i] === ci) tiles.push(i);
       if (!tiles.length) return;
       for (const [name, value, px, py] of c.posts) {
-        const tile = worldWaterNear(W, H, ocean, px, py, (i) => nb[i].some((j) => col[j] === ci) && !nb[i].some((j) => t[j] !== 'water' && col[j] !== ci) && !posts.some((p) => p.tile === i));
-        if (tile >= 0) { posts.push({ tile, value, name, colony: c.name }); postOf[name] = tile; }
+        const tile = worldWaterNear(W, H, ocean, px, py, (i) => nb[i].some((j) => col[j] === ci) && !nb[i].some((j) => t[j] !== 'water' && col[j] !== ci) && !taken.has(i));
+        if (tile < 0) continue;
+        postOf[name] = tile; taken.add(tile);
+        if (!keep || keep.has(name)) posts.push({ tile, value, name, colony: c.name });
       }
       let sx = 0, sy = 0; for (const i of tiles) { const [x, y] = worldXY(W, H, i); sx += x; sy += y; }
       sx /= tiles.length; sy /= tiles.length;
