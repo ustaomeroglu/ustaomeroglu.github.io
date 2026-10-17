@@ -772,6 +772,11 @@
     g.beginPath(); g.moveTo(0, 0); g.lineTo(0, -S * 0.62); g.lineWidth = 1.6; g.strokeStyle = PAL.ink; g.stroke();
     g.beginPath(); g.moveTo(1, -S * 0.58); g.quadraticCurveTo(S * 0.38, -S * 0.32, 1, -S * 0.06); g.closePath();
     g.fillStyle = opts.merchant ? '#efe4c8' : color; g.fill(); g.lineWidth = 1.2; g.stroke();
+    if (opts.cargo) {
+      // a mixed fleet: warships escorting merchant ships, shown by a gold coin at the stern
+      g.beginPath(); g.arc(-S * 0.3, -S * 0.04, S * 0.09, 0, Math.PI * 2); g.fillStyle = PAL.gold; g.fill(); g.lineWidth = 1; g.strokeStyle = PAL.goldDark; g.stroke();
+      g.strokeStyle = PAL.ink;
+    }
     if (opts.merchant) {
       g.beginPath(); g.moveTo(1, -S * 0.4); g.quadraticCurveTo(S * 0.3, -S * 0.32, 1, -S * 0.24); g.closePath(); g.fillStyle = color; g.fill();
       g.beginPath(); g.moveTo(0, -S * 0.62); g.lineTo(-S * 0.2, -S * 0.56); g.lineTo(0, -S * 0.5); g.closePath(); g.fillStyle = color; g.fill(); g.lineWidth = 1; g.stroke();
@@ -1134,7 +1139,7 @@
       if (p.x < x0 || p.x > x1 || p.y < y0 || p.y > y1) continue;
       const mine = ov.readyOwner === f.owner;
       const left = mine ? CC.fleetMovesLeft(f) : 0;
-      const r = drawShip(g, p.x, p.y + S * 0.1, S, CC.colorOf(st, f.owner), f.n, { ready: mine && (left > 0 || (!f.fired && !CC.isMerchant(f))), selected: ov.selFleet === f.id, dim: mine && left <= 0 && (f.fired || CC.isMerchant(f)), merchant: CC.isMerchant(f) });
+      const r = drawShip(g, p.x, p.y + S * 0.1, S, CC.colorOf(st, f.owner), f.n, { ready: mine && (left > 0 || (!f.fired && CC.warshipsOf(f) > 0)), selected: ov.selFleet === f.id, dim: mine && left <= 0 && (f.fired || !CC.warshipsOf(f)), merchant: CC.isMerchant(f), cargo: CC.merchantsOf(f) > 0 && CC.warshipsOf(f) > 0 });
       this.banners.push({ id: f.id, fleet: true, ...r, x: r.x + ox });
     }
     // hover and selection outlines

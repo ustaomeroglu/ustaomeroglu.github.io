@@ -296,7 +296,7 @@
   function nextShip(st, me) {
     const posts = st._posts || [];
     let war = 0, merchants = 0;
-    for (const f of st.fleets) if (f.owner === me) { if (CC.isMerchant(f)) merchants += f.n; else war += f.n; }
+    for (const f of st.fleets) if (f.owner === me) { merchants += CC.merchantsOf(f); war += CC.warshipsOf(f); }
     if (war + merchants >= Math.min(5, posts.length + 1)) return null;
     if (war < 1) return 'war';
     if (merchants < Math.min(3, posts.length)) return 'merchant';
@@ -609,7 +609,7 @@
         }
       }
       // the computer cuts the trade of every house it is at war with
-      if (!CC.isMerchant(f)) f.block = st.players.filter((P) => P.alive && P.id !== me && CC.atWar(st, me, P.id)).map((P) => P.id);
+      if (CC.warshipsOf(f)) f.block = st.players.filter((P) => P.alive && P.id !== me && CC.atWar(st, me, P.id)).map((P) => P.id);
       if (dest < 0) continue;
       const rep = CC.moveFleet(st, f.id, dest);
       if (rep.error) continue;
