@@ -31,8 +31,9 @@
     water: { name: 'Sea', passable: false, cost: 0, def: 1 },
     plains: { name: 'Plains', passable: true, cost: 1, def: 1 },
     // defence from CK3's terrain advantage (+5% damage a point; forest +3, hills +5), as soldier-equivalents: sqrt(1 + 0.05 x points)
-    forest: { name: 'Forest', passable: true, cost: 2, def: 1.07 },
-    hills: { name: 'Hills', passable: true, cost: 2, def: 1.12 },
+    // marching cost outside your land from CK3's movement speeds: forest and hills 80% -> 1.25 steps a tile
+    forest: { name: 'Forest', passable: true, cost: 1.25, def: 1.07 },
+    hills: { name: 'Hills', passable: true, cost: 1.25, def: 1.12 },
     mountain: { name: 'Mountains', passable: false, cost: 0, def: 1 },
     colony: { name: 'Distant land', passable: false, cost: 0, def: 1 },
     desert: { name: 'Desert', passable: false, cost: 0, def: 1 },
@@ -57,7 +58,7 @@
     baseMP: 5, cavalryMP: 7, navalCost: 3, navalRange: 14, navalHop: false,
     zocArmy: 0, zocTown: 1,  // armies hold only their own tile; towns, castles and outposts the 6 around them
     peaceRounds: 5, tributeTurns: 5, tributeMax: 40,
-    sizeSlowEvery: 40, sizeSlowMax: 1,   // -1 step for an army of more than 40 soldiers
+    sizeSlowEvery: 40, sizeSlowMax: 0,   // armies march at the same pace whatever their size (as in CK3)
     fatigueMin: 0, fatigueMax: 2,        // steps a won battle costs: none for a rout, 2 for an even fight
     capBase: 1, capPer: 2, capMax: 16,
     ordersBase: 2, ordersMax: 6,
@@ -1122,7 +1123,7 @@
     UNITS.forEach((d, k) => { const n = u[k] || 0; points += n * d.land; if (n && !d.mounted) mountedOnly = false; if (d.siege) guns += n; });
     const cap = soldiers ? Math.min(RULES.capMax, RULES.capBase + Math.floor(points / RULES.capPer)) : 0;
     const base = mountedOnly ? RULES.cavalryMP : RULES.baseMP;
-    // large armies march a little slower, and cannons slow them further
+    // cannons slow an army (any size slowdown is off: sizeSlowMax 0)
     const slow = soldiers ? Math.min(RULES.sizeSlowMax, Math.floor((soldiers - 1) / RULES.sizeSlowEvery)) : 0;
     const gunSlow = guns ? RULES.cannonSlow : 0;
     return { soldiers, cap, mp: Math.max(1, base - slow - gunSlow), slow, gunSlow };
@@ -1157,7 +1158,7 @@
   function stepCost(st, me, j) {
     const t = st.tiles[j];
     if (t.owner === me) return 1; // roads through your own lands
-    return TERRAIN[t.t].cost + (t.river ? 1 : 0);
+    return TERRAIN[t.t].cost; // rivers do not slow a march; they help whoever defends them
   }
 
   function isHarborTile(st, tile, me) {
