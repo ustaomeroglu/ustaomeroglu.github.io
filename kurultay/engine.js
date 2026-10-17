@@ -1902,7 +1902,7 @@
   }
 
   // ---------------------------------------------------------------- the sea: fleets, naval battles, bombardment
-  Object.assign(RULES, { buildTurns: 1, seaUpkeep: 0.5, portCost: 140, portUpkeep: 1, riverShips: 3, trainTurns: 1, shipCost: 50, shipUpkeep: 2, shipAtt: 2, shipDef: 2, merchantCost: 40, merchantUpkeep: 1, merchantPow: 0.5, postSetup: 1, fleetMP: 9, shipsPerTurn: 2,
+  Object.assign(RULES, { buildTurns: 1, seaUpkeep: 0.5, portCost: 140, portUpkeep: 1, riverShips: 3, trainTurns: 1, shipCost: 50, shipUpkeep: 2, shipAtt: 2, shipDef: 2, merchantCost: 50, merchantUpkeep: 2, merchantPow: 0.5, postSetup: 1, fleetMP: 9, shipsPerTurn: 2,
     // armies aboard ships: board at an own harbor for gold, sail fast, but are nearly helpless against warships
     transportMP: 8, embarkBase: 5, embarkPer: 1, transportDef: 0.06, transportLoss: 0.6, bombardHit: 7, bombardWallHit: 9 });
   const fleetAt = (st, tile) => (st.fleets || []).find((f) => f.tile === tile) || null;
