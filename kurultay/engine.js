@@ -7,15 +7,18 @@
   // ---------------------------------------------------------------- constants
   // land: how much ground the unit helps seize; needs: the town building that trains it
   const UNITS = [
-    // Balanced on the Medieval: Total War counters: spears stop cavalry, cavalry rides down archers and loose infantry,
-    // swordsmen cut through spear lines, archers wear attackers down and are deadly on walls. Costs keep their ratios.
-    { key: 'spear', name: 'Spearmen', one: 'Spearman', cost: 5, upkeep: 0.5, att: 1.0, def: 1.2, land: 1,
+    // Strengths from Crusader Kings III's men-at-arms: each unit's fighting value is sqrt(damage x toughness), scaled so
+    // spearmen (CK3 pikemen, 22 / 24) are 1.2. Archers = bowmen (25 / 10), swordsmen = armored footmen (32 / 22),
+    // knights = armored horsemen (100 / 35). Costs follow CK3's prices, with knights a little cheaper for their charge to
+    // stay worth it. Archers keep an edge in defence, more so on walls. The counters (spears against knights and so on)
+    // follow CK3's: a countered unit loses up to 45% of its punch.
+    { key: 'spear', name: 'Spearmen', one: 'Spearman', cost: 5, upkeep: 0.5, att: 1.2, def: 1.2, land: 1,
       desc: 'Cheap line infantry. A spear wall stops a cavalry charge cold, but swordsmen cut through it.' },
-    { key: 'archer', name: 'Archers', one: 'Archer', cost: 6, upkeep: 0.5, att: 1.3, def: 1.2, land: 1,
-      desc: 'Volleys soften any attack, and they fight twice as hard on town walls. Knights ride them down in the open.' },
-    { key: 'knight', name: 'Knights', one: 'Knight', cost: 16, upkeep: 1, att: 3.4, def: 3.5, land: 2, mounted: true, needs: 'stables',
+    { key: 'archer', name: 'Archers', one: 'Archer', cost: 4, upkeep: 0.4, att: 0.83, def: 1.05, land: 1,
+      desc: 'Cheap and fragile in attack, but their volleys hold a defence, and on town walls they fight ×1.6 harder. Knights ride them down in the open.' },
+    { key: 'knight', name: 'Knights', one: 'Knight', cost: 13, upkeep: 1, att: 3.09, def: 3.09, land: 2, mounted: true, needs: 'stables',
       desc: 'Heavy cavalry: they ride down archers and swordsmen and march faster, but a spear wall stops them, and forests, hills and walls slow the charge. Need Stables.' },
-    { key: 'sword', name: 'Swordsmen', one: 'Swordsman', cost: 10, upkeep: 0.75, att: 2.2, def: 2.1, land: 1, needs: 'barracks',
+    { key: 'sword', name: 'Swordsmen', one: 'Swordsman', cost: 6, upkeep: 0.65, att: 1.39, def: 1.39, land: 1, needs: 'barracks',
       desc: 'Armoured foot soldiers, best in attack: they cut through spear lines, but cavalry rides them down. Need Barracks.' },
     { key: 'cannon', name: 'Cannons', one: 'Cannon', cost: 20, upkeep: 1, att: 1.0, def: 0.4, land: 0, siege: true, needs: 'foundry',
       desc: 'Siege guns: ×4 against towns and ×2.5 against outposts, but weak in the open field. An army with cannons walks 1 step less. Need a Foundry.' },
@@ -27,8 +30,9 @@
   const TERRAIN = {
     water: { name: 'Sea', passable: false, cost: 0, def: 1 },
     plains: { name: 'Plains', passable: true, cost: 1, def: 1 },
-    forest: { name: 'Forest', passable: true, cost: 2, def: 1.25 },
-    hills: { name: 'Hills', passable: true, cost: 2, def: 1.4 },
+    // defence from CK3's terrain advantage (+5% damage a point; forest +3, hills +5), as soldier-equivalents: sqrt(1 + 0.05 x points)
+    forest: { name: 'Forest', passable: true, cost: 2, def: 1.07 },
+    hills: { name: 'Hills', passable: true, cost: 2, def: 1.12 },
     mountain: { name: 'Mountains', passable: false, cost: 0, def: 1 },
     colony: { name: 'Distant land', passable: false, cost: 0, def: 1 },
     desert: { name: 'Desert', passable: false, cost: 0, def: 1 },
@@ -39,14 +43,16 @@
     capitalIncome: 15, cityIncome: 6, marketIncome: 5, marketTrade: 1, marketTradeMax: 6, // each market level: +1 gold on every trade agreement, at most +6 each
     farmIncome: 4, riverFarmBonus: 2, mineIncome: 9,
     farmCost: 20, mineCost: 35, castleCost: 300,
-    outpostCost: 40, outpostUpkeep: 1, outpostDef: 1.3, outpostMilitia: 2, outpostSpacing: 2,
+    outpostCost: 40, outpostUpkeep: 1, outpostDef: 1.32, outpostMilitia: 2, outpostSpacing: 2,
     tilesPerFarm: 5, castleMinDist: 4,
-    walls: { cost: [40, 70, 110], mult: [1.15, 1.35, 1.6, 1.9] },
+    // walls as CK3 fort levels: a siege needs 100 + 75 per level, taken as sqrt of the extra effort
+    walls: { cost: [40, 70, 110], mult: [1, 1.32, 1.58, 1.8] },
     market: { cost: [30, 50, 75] },
     harborCost: 100, stablesCost: 40, barracksCost: 35, foundryCost: 60,
     swordVsSpear: 0.3, cannonCity: 4, cannonTower: 2.5, cannonSlow: 1,
     recruitBase: 6, recruitPerWall: 2,
-    riverAtt: 0.85, amphibAtt: 0.8,
+    riverAtt: 0.82, amphibAtt: 0.63, // CK3: defender +10 across a river, attacker -30 from the sea
+    militiaDef: 1.0, archerWallMult: 1.6, // town militia: between spearmen and archers; archers on walls
     knightVsArcher: 0.4, knightCityMult: 0.6, knightRoughMult: 0.7, knightSpearPenalty: 0.45, knightPikeDef: 0.2,
     baseMP: 5, cavalryMP: 7, navalCost: 3, navalRange: 14, navalHop: false,
     zocArmy: 0, zocTown: 1,  // armies hold only their own tile; towns, castles and outposts the 6 around them
@@ -1309,17 +1315,17 @@
     const aMods = [];
     if (ctx.river) aMods.push({ label: 'River crossing', mult: RULES.riverAtt });
     if (ctx.amphibious) aMods.push({ label: 'Landing from ships', mult: RULES.amphibAtt });
-    const archerDef = ctx.city ? UNITS[1].def * 2 : UNITS[1].def;
+    const archerDef = ctx.city ? UNITS[1].def * RULES.archerWallMult : UNITS[1].def;
     // defending knights are also blunted by an attacking line of spearmen
     const aSold = sum(att);
     const dkMult = 1 - RULES.knightPikeDef * (aSold ? g(att, 0) / aSold : 0);
     const dmult = [1, archerDef / UNITS[1].def, dkMult, 1, 1];
-    let dBase = militia * UNITS[0].def;
+    let dBase = militia * RULES.militiaDef;
     UNITS.forEach((d, k) => { dBase += g(def, k) * d.def * (dmult[k] || 1); });
     const dMods = [];
     const td = TERRAIN[ctx.terrain].def;
     if (td !== 1) dMods.push({ label: TERRAIN[ctx.terrain].name, mult: td });
-    if (ctx.city) dMods.push({ label: ctx.city.walls ? `Walls level ${ctx.city.walls}` : 'Town palisade', mult: RULES.walls.mult[ctx.city.walls] });
+    if (ctx.city && RULES.walls.mult[ctx.city.walls] !== 1) dMods.push({ label: ctx.city.walls ? `Walls level ${ctx.city.walls}` : 'Town palisade', mult: RULES.walls.mult[ctx.city.walls] });
     else if (ctx.structure === 'tower') dMods.push({ label: 'Outpost', mult: RULES.outpostDef });
     const A = aBase * aMods.reduce((m, x) => m * x.mult, 1);
     const D = dBase * dMods.reduce((m, x) => m * x.mult, 1);
