@@ -1050,7 +1050,9 @@
     const r = canPickStart(st, p, tile);
     if (!r.ok) return r;
     const k = st._map.starts.indexOf(tile);
-    const c = foundCapital(st, p, tile, k >= 0 ? st._names[k] : st._wrap ? worldPlace(st, tile) : null);
+    // on the Known World a capital takes the name of the nearest real place to where it was raised
+    const world = st.settings.map === 'world';
+    const c = foundCapital(st, p, tile, (world && worldPlace(st, tile)) || (k >= 0 ? st._names[k] : null));
     log(st, `${nameOf(st, p)} raised its capital at ${c.name}.`, 'city', [p]);
     st.pick.taken.push(tile);
     st.pick.idx++;
@@ -1065,7 +1067,7 @@
   function worldPlace(st, tile) {
     const sk = sketchOf(st.settings.gen || 1), W = st.W, H = st.H;
     const [x, y] = worldXY(W, H, tile), used = new Set(st.cities.map((c) => c.name));
-    let best = null, bd = 5;
+    let best = null, bd = 8;
     for (const [n, px, py] of sk.places) { if (used.has(n)) continue; const d = Math.hypot(px - x, py - y); if (d < bd) { bd = d; best = n; } }
     return best;
   }
