@@ -290,6 +290,9 @@
     // ---------------------------------------------------------------- flags
     ['Draw your flag', 'Bayrağını çiz'], ['Paint it cell by cell. It flies over your towns and on every army&#39;s banner.', 'Kare kare boya. Kasabalarının üstünde ve her ordunun sancağında dalgalanır.'],
     ["Paint it cell by cell. It flies over your towns and on every army's banner.", 'Kare kare boya. Kasabalarının üstünde ve her ordunun sancağında dalgalanır.'],
+    ["Paint it cell by cell. It flies over your towns and on every army's banner. The first colour is always your house colour.", 'Kare kare boya. Kasabalarının üstünde ve her ordunun sancağında dalgalanır. İlk renk her zaman hanedanının rengidir.'],
+    ['Paint it cell by cell. It flies over your towns and on every army&#39;s banner. The first colour is always your house colour.', 'Kare kare boya. Kasabalarının üstünde ve her ordunun sancağında dalgalanır. İlk renk her zaman hanedanının rengidir.'],
+    ['Thick', 'Kalın'], ['Mirror left and right', 'Sağı solu aynala'], ['Disc', 'Daire'],
     ['Brush', 'Fırça'], ['Fill', 'Doldur'], ['Start from a pattern (in the colour you picked):', 'Bir desenle başla (seçtiğin renkle):'],
     ['Plain', 'Düz'], ['Cross', 'Haç'], ['Nordic', 'İskandinav'], ['Saltire', 'Çapraz'], ['Quarters', 'Dörtlü'], ['Stripes', 'Çizgili'], ['Pale', 'Dikey şerit'], ['Chevron', 'Ok başı'], ['Border', 'Kenar'],
     ['No flag, just my colour', 'Bayrak yok, yalnızca rengim'], ['Use this flag', 'Bu bayrağı kullan'],

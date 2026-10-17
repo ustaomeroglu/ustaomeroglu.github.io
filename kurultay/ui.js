@@ -39,6 +39,8 @@
   }
   const flagTag = (flag, hex, cls) => `<img class="flagmark ${cls || ''}" alt="" src="${flagUrl(flag, hex)}">`;
   const mark = (st, owner) => { const f = CC.flagOf(st, owner), hex = CC.colorOf(st, owner); return f ? flagTag(f, hex) : swatch(hex); };
+  // a larger mark for headings: panel heads, whose turn it is, battle reports, the winner
+  const bigMark = (st, owner, cls) => { const f = CC.flagOf(st, owner), hex = CC.colorOf(st, owner); return f ? flagTag(f, hex, cls || 'big') : swatch(hex, 'width:26px;height:26px'); };
   const Sfx = CC.Sfx || { play() {}, setOn() {}, setVolume() {} };
   const sfx = (name, o) => Sfx.play(name, o);
   // Attributes for a control that stays hoverable when unavailable, so its tip can say why.
@@ -348,7 +350,7 @@
 
   function closeBtn() { return '<button class="btn small ghost" data-act="deselect" type="button" aria-label="Close">✕</button>'; }
   const chip = (label, value, tipAttr, cls) => `<span class="chip ${cls || ''}" ${tipAttr || ''}><small>${label}</small><b>${value}</b></span>`;
-  const head = (color, title, sub, owner) => `<div class="pane-head">${owner != null && App.st && CC.flagOf(App.st, owner) ? mark(App.st, owner) : swatch(color)}<h2>${title}</h2>${closeBtn()}</div>${sub ? `<p class="sub">${sub}</p>` : ''}`;
+  const head = (color, title, sub, owner) => `<div class="pane-head">${owner != null && App.st && CC.flagOf(App.st, owner) ? bigMark(App.st, owner) : swatch(color)}<h2>${title}</h2>${closeBtn()}</div>${sub ? `<p class="sub">${sub}</p>` : ''}`;
 
   // while houses choose where their capitals stand
   function panelPick() {
@@ -373,7 +375,7 @@
           <div class="actions"><button class="btn primary" type="button" data-act="pick-start">Raise your capital here</button></div>`;
       }
     }
-    return `<div class="pane-head">${mark(s, s.cur)}<h2>${mine ? 'Choose your capital' : 'Choosing capitals'}</h2></div>${body}
+    return `<div class="pane-head">${bigMark(s, s.cur)}<h2>${mine ? 'Choose your capital' : 'Choosing capitals'}</h2></div>${body}
       <h3>Order of choosing</h3><ol class="list">${rows}</ol>`;
   }
 
@@ -385,7 +387,7 @@
     }
     if (!myTurn()) {
       const why = App.busy ? 'is making their moves' : App.online ? 'is playing their turn' : 'is thinking';
-      return `<div class="pane-head">${mark(s, s.cur)}<h2>${esc(p.name)}</h2><span class="tag">${p.ai ? 'CPU' : 'Their turn'}</span></div>
+      return `<div class="pane-head">${bigMark(s, s.cur)}<h2>${esc(p.name)}</h2><span class="tag">${p.ai ? 'CPU' : 'Their turn'}</span></div>
         <p class="sub"><span class="spin"></span> ${esc(p.name)} ${why}…</p>${queueSection()}${App.online ? App.online.panelExtra() : ''}`;
     }
     const inc = CC.income(s, s.cur), fs = CC.farmSlots(s, s.cur);
@@ -394,7 +396,7 @@
     const offers = s.dip.offers.filter((o) => o.to === s.cur).length;
     const rows = armies.map((a) => `<li><button type="button" data-act="sel-army" data-id="${a.id}" ${tip(`${compText(a.u)}. ${stepsText(a)}.`)}>${mark(s, a.owner)}<b>${CC.sum(a.u)}</b><span class="meta">${esc(CC.placeName(s, a.tile))} · ${CC.movesLeft(a)} step${CC.movesLeft(a) === 1 ? '' : 's'}</span></button></li>`)
       .concat(fleets.map((f) => `<li><button type="button" data-act="sel-fleet" data-id="${f.id}" ${tip(CC.isMerchant(f) ? `${f.n} ${shipWord(f, f.n)}. ${CC.fleetMovesLeft(f)} moves left.` : `${f.n} warship${f.n === 1 ? '' : 's'}. ${CC.fleetMovesLeft(f)} moves left${f.fired ? ', guns fired' : ', guns ready'}.`)}>${shipGlyph(CC.colorOf(s, f.owner))}<b>${f.n}</b><span class="meta">at sea · ${CC.fleetMovesLeft(f)} moves</span></button></li>`)).join('');
-    return `<div class="pane-head">${mark(s, s.cur)}<h2>${esc(p.name)}</h2><span class="tag gilt">Your turn</span></div>
+    return `<div class="pane-head">${bigMark(s, s.cur)}<h2>${esc(p.name)}</h2><span class="tag gilt">Your turn</span></div>
       <div class="chips">${chip('Gold', `${p.gold} <span class="${inc.net >= 0 ? 'pos' : 'neg'}">${signed(inc.net)}</span>`, tipFn('treasury'))}${chip('Orders', `${p.orders}/${CC.ordersPerTurn(s, s.cur)}`, tipFn('orders'))}${chip('Farms', `${fs.farms}/${fs.max}`, tipFn('farms'))}${inc.trade ? chip('Trade', `+${inc.trade}`, tipFn('treasury')) : ''}</div>
       ${offers ? `<div class="actions"><button class="btn primary" type="button" data-act="offers">${offers} offer${offers === 1 ? '' : 's'} waiting</button></div>` : ''}
       ${queueSection()}
@@ -1485,8 +1487,8 @@
     const ca = CC.colorOf(s, b.attacker), cd = CC.colorOf(s, b.defender), pa = Math.round((100 * b.Ae) / Math.max(0.01, b.Ae + b.De));
     const most = Math.max(CC.sum(b.att), CC.sum(b.def) + (b.militia || 0)), per = Math.max(1, Math.ceil(most / 36));
     const scene = `<div class="bscene">
-        <div class="bnames"><div>${mark(s, b.attacker)}<b>${esc(CC.nameOf(s, b.attacker))}</b><small>Attacker · ${CC.sum(b.att)}</small><span class="dice bdice" ${tip(`Luck ${b.ad[0] + b.ad[1]}: ×${b.La.toFixed(2)}`)}>${dieHtml(b.ad[0])}${dieHtml(b.ad[1])}</span></div>
-          <div>${mark(s, b.defender)}<b>${esc(CC.nameOf(s, b.defender))}</b><small>Defender · ${CC.sum(b.def) + (b.militia || 0)}</small><span class="dice bdice" ${tip(`Luck ${b.dd[0] + b.dd[1]}: ×${b.Ld.toFixed(2)}`)}>${dieHtml(b.dd[0])}${dieHtml(b.dd[1])}</span></div></div>
+        <div class="bnames"><div>${bigMark(s, b.attacker)}<b>${esc(CC.nameOf(s, b.attacker))}</b><small>Attacker · ${CC.sum(b.att)}</small><span class="dice bdice" ${tip(`Luck ${b.ad[0] + b.ad[1]}: ×${b.La.toFixed(2)}`)}>${dieHtml(b.ad[0])}${dieHtml(b.ad[1])}</span></div>
+          <div>${bigMark(s, b.defender)}<b>${esc(CC.nameOf(s, b.defender))}</b><small>Defender · ${CC.sum(b.def) + (b.militia || 0)}</small><span class="dice bdice" ${tip(`Luck ${b.dd[0] + b.dd[1]}: ×${b.Ld.toFixed(2)}`)}>${dieHtml(b.dd[0])}${dieHtml(b.dd[1])}</span></div></div>
         <canvas class="bcv" data-b="${idx}" aria-label="The two armies on the field"></canvas>
         ${per > 1 ? `<p class="bnote">Each figure stands for about ${per} soldiers.</p>` : ''}
         <div class="bbar reveal" ${tip('Fighting strength after luck: the longer bar wins.')}><span style="width:${pa}%;background:${ca}"><b>${b.Ae.toFixed(1)}</b></span><span style="width:${100 - pa}%;background:${cd}"><b>${b.De.toFixed(1)}</b></span></div>
@@ -1534,7 +1536,7 @@
     return new Promise((resolve) => {
       const s = App.st, p = s.players[s.cur];
       const lines = eventsFor(s.cur).slice(-8).map((e) => `<li>${esc(e.text)}</li>`).join('');
-      modal(`<div class="pane-head">${swatch(CC.colorOf(s, s.cur), 'width:30px;height:30px;border-radius:999px')}<h2>${esc(p.name)}, your turn</h2></div>
+      modal(`<div class="pane-head">${CC.flagOf(s, s.cur) ? bigMark(s, s.cur, 'huge') : swatch(CC.colorOf(s, s.cur), 'width:30px;height:30px;border-radius:999px')}<h2>${esc(p.name)}, your turn</h2></div>
         <p class="lead">Round ${s.round}${s.maxRounds ? ' of ' + s.maxRounds : ''}. You have ${p.gold} gold (${signed(p.lastIncome)} this turn) and ${p.orders} marching orders.</p>
         ${lines ? `<h3>Since your last turn</h3><ul class="summary-list">${lines}</ul>` : ''}
         <div class="modal-actions"><button class="btn primary" type="button" data-close>Begin turn</button></div>`, { onClose: resolve, dismiss: false });
@@ -1549,9 +1551,9 @@
     const w = s.players[o.winner];
     const rows = o.ranking.map((r, k) => {
       const p = s.players[r.id];
-      return `<tr><td>${k + 1}</td><td>${mark(s, r.id)} ${esc(p.name)}${p.alive ? '' : ' <span class="tag">fallen</span>'}</td><td><b>${r.score}</b></td><td>${r.cities}</td><td>${r.tiles}</td><td>${r.farms}</td><td>${r.mines}</td><td>${p.stats.won}</td></tr>`;
+      return `<tr><td>${k + 1}</td><td>${bigMark(s, r.id, 'mid')} ${esc(p.name)}${p.alive ? '' : ' <span class="tag">fallen</span>'}</td><td><b>${r.score}</b></td><td>${r.cities}</td><td>${r.tiles}</td><td>${r.farms}</td><td>${r.mines}</td><td>${p.stats.won}</td></tr>`;
     }).join('');
-    modal(`<h2>${esc(w.name)} ${o.reason === 'conquest' ? 'conquers the realm' : 'holds the greatest realm'}</h2>
+    modal(`${CC.flagOf(s, o.winner) ? `<div class="winflag">${bigMark(s, o.winner, 'huge')}</div>` : ''}<h2>${esc(w.name)} ${o.reason === 'conquest' ? 'conquers the realm' : 'holds the greatest realm'}</h2>
       <p class="lead">${o.reason === 'conquest' ? 'Every rival house has fallen.' : `The chronicle closes after round ${o.round}.`} Score: 1 per land tile, ${RULES.score.farm} per farm, ${RULES.score.mine} per mine, ${RULES.score.city} per town.</p>
       <div class="table-wrap"><table class="rank"><thead><tr><th>#</th><th>House</th><th>Score</th><th>Towns</th><th>Land</th><th>Farms</th><th>Mines</th><th>Battles won</th></tr></thead><tbody>${rows}</tbody></table></div>
       <div class="modal-actions"><button class="btn" type="button" data-close>View the map</button><button class="btn primary" type="button" data-close="new">New game</button></div>`,
@@ -1667,27 +1669,30 @@
   // ------------------------------------------------------------ flag editor
   // Paint a FLAG_W x FLAG_H banner. Resolves with the design, null to go back to a plain colour, or undefined on cancel.
   const INK_NAMES = ['House colour', 'Black', 'Parchment', 'Gold', 'Red', 'Blue', 'Green', 'Purple'];
+  // patterns on a 16 x 10 grid (u, v from the cell centre), drawn at whatever size the flag has
   const FLAG_PATTERNS = {
     Plain: () => 0,
-    Cross: (x, y) => (x === 7 || x === 8 || y === 4 || y === 5 ? 1 : 0),
-    Nordic: (x, y) => (x === 4 || x === 5 || y === 4 || y === 5 ? 1 : 0),
-    Saltire: (x, y) => (Math.abs(x * 10 / 16 - y) < 1.1 || Math.abs((15 - x) * 10 / 16 - y) < 1.1 ? 1 : 0),
-    Quarters: (x, y) => ((x < 8) === (y < 5) ? 1 : 0),
-    Stripes: (x, y) => (Math.floor(y / 2) % 2 ? 1 : 0),
-    Pale: (x) => (x >= 5 && x <= 10 ? 1 : 0),
-    Chevron: (x, y) => (y >= 9 - Math.abs(x - 7.5) * 0.9 ? 1 : 0),
-    Border: (x, y) => (x === 0 || y === 0 || x === 15 || y === 9 ? 1 : 0),
+    Cross: (u, v) => (Math.abs(u - 8) < 1.2 || Math.abs(v - 5) < 1.2 ? 1 : 0),
+    Nordic: (u, v) => (Math.abs(u - 5) < 1.2 || Math.abs(v - 5) < 1.2 ? 1 : 0),
+    Saltire: (u, v) => (Math.abs(u * 10 / 16 - v) < 1.1 || Math.abs((16 - u) * 10 / 16 - v) < 1.1 ? 1 : 0),
+    Quarters: (u, v) => ((u < 8) === (v < 5) ? 1 : 0),
+    Stripes: (u, v) => (Math.floor(v / 2) % 2 ? 1 : 0),
+    Pale: (u) => (u >= 5 && u <= 11 ? 1 : 0),
+    Chevron: (u, v) => (v >= 9.5 - Math.abs(u - 8) * 0.9 ? 1 : 0),
+    Border: (u, v) => (u < 1 || v < 1 || u > 15 || v > 9 ? 1 : 0),
+    Disc: (u, v) => (Math.hypot((u - 8) / 1.6, v - 5) < 2.6 ? 1 : 0),
   };
   function editFlag(initial, hex) {
     return new Promise((resolve) => {
       const W = CC.FLAG_W, H = CC.FLAG_H, pal = CC.flagPalette(hex);
-      const cells = (CC.validFlag(initial) ? initial : '0'.repeat(W * H)).split('').map(Number);
+      const cells = (CC.fullFlag(initial) || '0'.repeat(W * H)).split('').map(Number);
       let ink = 3, tool = 'brush', result;
-      const m = modal(`<h2>Draw your flag</h2><p class="lead">Paint it cell by cell. It flies over your towns and on every army's banner.</p>
-        <div class="flag-ed"><canvas id="fe-cv" width="${W * 22}" height="${H * 22}" aria-label="Flag drawing area"></canvas>
+      const m = modal(`<h2>Draw your flag</h2><p class="lead">Paint it cell by cell. It flies over your towns and on every army's banner. The first colour is always your house colour.</p>
+        <div class="flag-ed"><canvas id="fe-cv" width="${W * 14}" height="${H * 14}" aria-label="Flag drawing area"></canvas>
           <div class="fe-side">
             <div class="fe-inks">${pal.map((c, k) => `<button type="button" class="fe-ink" data-ink="${k}" style="background:${c}" aria-label="${INK_NAMES[k]}" ${tip(INK_NAMES[k])}></button>`).join('')}</div>
-            <div class="seg fe-tools"><button type="button" data-tool="brush" aria-pressed="true">Brush</button><button type="button" data-tool="fill" aria-pressed="false">Fill</button></div>
+            <div class="seg fe-tools"><button type="button" data-tool="brush" aria-pressed="true">Brush</button><button type="button" data-tool="thick" aria-pressed="false">Thick</button><button type="button" data-tool="fill" aria-pressed="false">Fill</button></div>
+            <label class="check fe-mirror"><input type="checkbox" id="fe-mirror"> Mirror left and right</label>
             <p class="sub small">Start from a pattern (in the colour you picked):</p>
             <div class="fe-pats">${Object.keys(FLAG_PATTERNS).map((k) => `<button type="button" class="btn small" data-pat="${k}">${k}</button>`).join('')}</div>
           </div></div>
@@ -1697,7 +1702,7 @@
       const paint = () => {
         const cw = cv.width / W, ch = cv.height / H;
         cells.forEach((c, k) => { g.fillStyle = pal[c]; g.fillRect((k % W) * cw, ((k / W) | 0) * ch, cw, ch); });
-        g.strokeStyle = 'rgba(0,0,0,0.18)'; g.lineWidth = 1;
+        g.strokeStyle = 'rgba(0,0,0,0.12)'; g.lineWidth = 1;
         g.beginPath();
         for (let x = 1; x < W; x++) { g.moveTo(x * cw + 0.5, 0); g.lineTo(x * cw + 0.5, cv.height); }
         for (let y = 1; y < H; y++) { g.moveTo(0, y * ch + 0.5); g.lineTo(cv.width, y * ch + 0.5); }
@@ -1713,9 +1718,21 @@
           for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const nx = x + dx, ny = y + dy, j = ny * W + nx; if (nx >= 0 && ny >= 0 && nx < W && ny < H && cells[j] === from) { cells[j] = ink; q.push(j); } }
         }
       };
+      // a dab of the brush (2 x 2 cells for the thick one), mirrored when asked
+      const mirror = () => m.querySelector('#fe-mirror').checked;
+      const dab = (k) => {
+        const x0 = k % W, y0 = (k / W) | 0, r = tool === 'thick' ? 2 : 1;
+        let changed = false;
+        for (let dy = 0; dy < r; dy++) for (let dx = 0; dx < r; dx++) {
+          const x = x0 + dx, y = y0 + dy;
+          if (x >= W || y >= H) continue;
+          for (const xx of mirror() ? [x, W - 1 - x] : [x]) { const j = y * W + xx; if (cells[j] !== ink) { cells[j] = ink; changed = true; } }
+        }
+        return changed;
+      };
       let down = false;
-      cv.addEventListener('pointerdown', (e) => { const k = cellAt(e); if (k < 0) return; down = true; try { cv.setPointerCapture(e.pointerId); } catch (err) { /* ignore */ } if (tool === 'fill') fill(k); else cells[k] = ink; paint(); sfx('paint'); });
-      cv.addEventListener('pointermove', (e) => { if (!down || tool !== 'brush') return; const k = cellAt(e); if (k >= 0 && cells[k] !== ink) { cells[k] = ink; paint(); } });
+      cv.addEventListener('pointerdown', (e) => { const k = cellAt(e); if (k < 0) return; down = true; try { cv.setPointerCapture(e.pointerId); } catch (err) { /* ignore */ } if (tool === 'fill') { fill(k); if (mirror()) fill(((k / W) | 0) * W + (W - 1 - (k % W))); } else dab(k); paint(); sfx('paint'); });
+      cv.addEventListener('pointermove', (e) => { if (!down || tool === 'fill') return; const k = cellAt(e); if (k >= 0 && dab(k)) paint(); });
       const up = () => { down = false; };
       cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up);
       m.addEventListener('click', (e) => {
@@ -1723,7 +1740,7 @@
         if (!b) return;
         if (b.dataset.ink != null) { ink = +b.dataset.ink; markInk(); }
         else if (b.dataset.tool) { tool = b.dataset.tool; m.querySelectorAll('[data-tool]').forEach((x) => x.setAttribute('aria-pressed', String(x === b))); }
-        else { const f = FLAG_PATTERNS[b.dataset.pat], a = ink || 2; cells.forEach((_, k) => { cells[k] = f(k % W, (k / W) | 0) ? a : 0; }); paint(); }
+        else { const f = FLAG_PATTERNS[b.dataset.pat], a = ink || 2; cells.forEach((_, k) => { cells[k] = f(((k % W) + 0.5) * 16 / W, (((k / W) | 0) + 0.5) * 10 / H) ? a : 0; }); paint(); }
       });
       markInk(); paint();
     });
@@ -1979,7 +1996,7 @@
     sfx('horn');
     App.R.fit(true); drawMap();
     if (App.online || humanCount() > 1) {
-      await new Promise((resolve) => modal(`<div class="pane-head">${mark(s, s.cur)}<h2>${esc(p.name)}, choose your capital</h2></div>
+      await new Promise((resolve) => modal(`<div class="pane-head">${bigMark(s, s.cur, 'huge')}<h2>${esc(p.name)}, choose your capital</h2></div>
         <p class="lead">Pick one of the marked sites on the map. Houses choose one after another, in an order drawn by lot.</p>
         <div class="modal-actions"><button class="btn primary" type="button" data-close>Choose</button></div>`, { onClose: resolve, dismiss: false }));
       if (token !== App.token || App.st !== s) return;

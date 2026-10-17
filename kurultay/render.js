@@ -451,10 +451,11 @@
     const kw = S * 0.28, kh = S * (0.55 + lvl * 0.08);
     g.beginPath(); g.rect(-kw / 2, h * 0.55 - kh, kw, kh); g.fillStyle = stoneDark; g.fill(); g.stroke();
     g.beginPath(); g.rect(-kw * 0.18, h * 0.55 - kh * 0.45, kw * 0.36, kh * 0.45); g.fillStyle = PAL.ink; g.fill();
-    const poleTop = h * 0.55 - kh - S * 0.42;
+    // a drawn flag is large enough to read (a little larger over a capital), on a pole tall enough to carry it
+    const fw = S * (c.capital ? 0.78 : 0.64), fh = fw * CC.FLAG_H / CC.FLAG_W;
+    const poleTop = h * 0.55 - kh - (flag ? Math.max(S * 0.42, fh + S * 0.08) : S * 0.42);
     g.beginPath(); g.moveTo(0, h * 0.55 - kh); g.lineTo(0, poleTop); g.lineWidth = 1.5; g.stroke();
     if (flag) {
-      const fw = S * 0.46, fh = fw * CC.FLAG_H / CC.FLAG_W;
       g.save(); g.imageSmoothingEnabled = false; g.drawImage(flag, 0, poleTop, fw, fh); g.restore();
       g.lineWidth = 1.2; g.strokeRect(0, poleTop, fw, fh);
     } else {
@@ -627,9 +628,12 @@
     g.restore();
     return { x: x - w / 2, y: y + sy, w, h: -sy + h };
   }
+  const WASH = { hue: 0.7, tint: 0.22 };
+  CC.WASH = WASH;
   // drawn flags as tiny canvases, cached by colour and design
   const flagCache = new Map();
   function flagImage(flag, hex) {
+    flag = CC.fullFlag(flag);
     if (!flag || typeof document === 'undefined') return null;
     const key = hex + flag;
     let cv = flagCache.get(key);
@@ -862,7 +866,13 @@
     for (const [o, list] of byOwner) {
       g.beginPath();
       for (const i of list) { const p = this.center(i); hexPath(g, p.x, p.y, S + 0.4); }
-      g.fillStyle = rgba(CC.colorOf(st, o), o < 0 ? 0.3 : 0.3); g.fill();
+      const col = CC.colorOf(st, o);
+      if (o < 0) { g.fillStyle = rgba(col, 0.3); g.fill(); continue; }
+      // the house's own colour: its hue laid over the land (so forests and hills still show), then a light wash
+      g.save();
+      g.globalCompositeOperation = 'color'; g.fillStyle = rgba(col, WASH.hue); g.fill();
+      g.globalCompositeOperation = 'source-over'; g.fillStyle = rgba(col, WASH.tint); g.fill();
+      g.restore();
     }
     // borders
     for (const [o, list] of byOwner) {
@@ -1061,7 +1071,8 @@
       const look = { ready: mine && left > 0, selected: ov.selArmy === a.id, dim: mine && left <= 0, flag: this.flagFor(a.owner) };
       let r;
       if (a.sea) r = drawTransport(g, p.x, p.y + S * 0.12, S, color, n, look);
-      else if (inCity || px < 10) r = drawBanner(g, p.x + (inCity ? S * 0.66 : 0), p.y + (inCity ? -S * 0.42 : -S * 0.12), S, color, n, look);
+      // a garrison's banner stands left of the town, clear of the town's flag on the right
+      else if (inCity || px < 10) r = drawBanner(g, p.x + (inCity ? (st.tiles[a.tile].b === 'city' && this.flagFor(st.tiles[a.tile].owner) ? -S * 0.7 : S * 0.66) : 0), p.y + (inCity ? -S * 0.42 : -S * 0.12), S, color, n, look);
       else r = this.drawArmy(g, p.x, p.y, a.u, color, n, Object.assign({ seed: a.id }, look));
       if (mine) {
         // steps left this turn, as a thin bar under the banner

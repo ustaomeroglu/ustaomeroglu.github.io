@@ -70,11 +70,23 @@
   ];
   const REBEL = { name: 'Rebels', hex: '#8d877c' };
   // A drawn flag: FLAG_W x FLAG_H cells, one palette digit each. Colour 0 is always the house colour.
-  const FLAG_W = 16, FLAG_H = 10;
+  // Flags drawn before were 16 x 10; they are still accepted and doubled up to the new size.
+  const FLAG_W = 32, FLAG_H = 20, OLD_FLAG_W = 16, OLD_FLAG_H = 10;
   const FLAG_INKS = [null, '#1d1812', '#f1e7cc', '#e9b824', '#c62f2f', '#2f5fb3', '#2e7d3a', '#6b3fa0'];
-  const validFlag = (f) => typeof f === 'string' && f.length === FLAG_W * FLAG_H && /^[0-7]+$/.test(f) && /[1-7]/.test(f);
+  const validFlag = (f) => typeof f === 'string' && (f.length === FLAG_W * FLAG_H || f.length === OLD_FLAG_W * OLD_FLAG_H) && /^[0-7]+$/.test(f) && /[1-7]/.test(f);
+  // any valid flag at the current size
+  function fullFlag(f) {
+    if (!validFlag(f)) return null;
+    if (f.length === FLAG_W * FLAG_H) return f;
+    if (fullFlag.memo.has(f)) return fullFlag.memo.get(f);
+    let out = '';
+    for (let y = 0; y < FLAG_H; y++) for (let x = 0; x < FLAG_W; x++) out += f[((y * OLD_FLAG_H / FLAG_H) | 0) * OLD_FLAG_W + ((x * OLD_FLAG_W / FLAG_W) | 0)];
+    fullFlag.memo.set(f, out);
+    return out;
+  }
+  fullFlag.memo = new Map();
   const flagPalette = (hex) => FLAG_INKS.map((c, k) => (k ? c : hex));
-  function flagOf(st, owner) { const P = owner >= 0 && st.players[owner]; return P && validFlag(P.flag) ? P.flag : null; }
+  function flagOf(st, owner) { const P = owner >= 0 && st.players[owner]; return P && validFlag(P.flag) ? fullFlag(P.flag) : null; }
 
   const HOUSE_NAMES = ['House Varn', 'House Aldane', 'House Morrow', 'House Kestrel',
     'House Thorne', 'House Ashby', 'House Corwin', 'House Lyle'];
@@ -943,7 +955,7 @@
     const st = baseState(map, settings);
     cfg.players.forEach((p, i) => {
       st.players.push({
-        id: i, name: p.name || HOUSE_NAMES[i], color: p.color != null ? p.color : i, ai: !!p.ai, flag: validFlag(p.flag) ? p.flag : null,
+        id: i, name: p.name || HOUSE_NAMES[i], color: p.color != null ? p.color : i, ai: !!p.ai, flag: fullFlag(p.flag),
         gold: RULES.startGold, alive: true, seen: 0, lastIncome: 0, elimRound: 0, orders: 0,
         stats: { won: 0, lost: 0, taken: 0, cities: 0, slain: 0, fallen: 0 },
       });
@@ -2577,7 +2589,7 @@
   }
 
   Object.assign(CC, {
-    UNITS, NU, Z, normU, TERRAIN, RULES, COLORS, REBEL, FLAG_W, FLAG_H, validFlag, flagPalette, flagOf, HOUSE_NAMES, SIZES, DICE,
+    UNITS, NU, Z, normU, TERRAIN, RULES, COLORS, REBEL, FLAG_W, FLAG_H, validFlag, fullFlag, flagPalette, flagOf, HOUSE_NAMES, SIZES, DICE,
     mulberry32, rand, hexDistW, hexDist, disk, mapDims, generateMap, tryGenerate,
     newGame, passable, fatigue, MAP_GEN, canDismantle, dismantle, isMerchant, shipPow, shipCostOf, stayOf, fleetAt, getFleet, canRecruitShips, recruitShips, fleetReach, fleetMovesLeft, planFleet, moveFleet, navalOdds,
     bombardTargets, bombard, sailable, canPickStart, pickStart, aiPickStart, finishBuilds, setBlockade, cancelBuild, pendingAt, pendingIn, routesThrough, harborSites, portOf, canPortShips, portShips, cancelPortShips, transportOdds, seaArmyAt, vesselAt, embarkCost, canEmbark, embark, seaReach, planSail, sailArmy, landingSpots, isWater, tradeRoutes, hasTrade, atWar, atPeace, peaceUntil, checkOffer, proposeOffer, answerOffer, describeOffer, relations, armyAt, getArmy, cityAt, isCoastal, colorOf, nameOf, armyStats, placeName, sum,
