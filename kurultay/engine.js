@@ -238,7 +238,7 @@
 
   // gen 1: the original maps (kept so older saves rebuild exactly); gen 2: lakes, inland seas and distant markets;
   // gen 3: more ocean and an inland sea opening onto it through a strait. kind 'world': the Known World sketch.
-  const MAP_GEN = 6;
+  const MAP_GEN = 7;
   function generateMap(np, size, seed, gen, kind) {
     for (let k = 0; k < 40; k++) {
       const s = (seed + k * 7919) >>> 0;
@@ -429,7 +429,7 @@
     for (let i = 0; i < N; i++) variation.push(rng());
 
     let posts = [], regions = [], lanes = [];
-    if (world) ({ posts, regions, lanes } = colonyPosts(W, H, nb, t, shape.col, gen >= 6 ? worldPostPick(np, mul) : null));
+    if (world) ({ posts, regions, lanes } = colonyPosts(W, H, nb, t, shape.col, gen >= 6 ? worldPostPick(np, mul, gen >= 7 ? starts.length + neutrals.length : 0) : null));
     else if (gen >= 2) { posts = placeMarkets(W, H, nb, t, np, seed); lanes = realmLanes(W, H, nb, t, posts, seed); }
     return { W, H, seed, gen, kind: world ? 'world' : 'realm', t, river, gold, elev: Array.from(elev), variation, rivers, starts, neutrals, names, posts, regions, lanes, nb6, nb };
   }
@@ -692,9 +692,12 @@
   // turn from the western and the eastern distant lands, so both sides of the map keep their share
   const POSTS_WEST = ['the Caribbean', 'the Gold Coast', 'Brazil', 'Newfoundland', 'Senegal', 'the River Plate', 'New Spain', 'New England', 'Bahia'];
   const POSTS_EAST = ['Calicut', 'Canton', 'Aden', 'Bengal', 'Zanzibar', 'Peking', 'Hormuz', 'Gujarat', 'Tartary'];
-  function worldPostPick(np, mul) {
+  // gen 7: in step with the towns on the map at the start (8 houses on a normal map: 19 towns, all 18 posts);
+  // gen 6 used the houses and the map size directly
+  const POSTS_PER_TOWN = 18 / 19;
+  function worldPostPick(np, mul, towns) {
     const all = POSTS_WEST.length + POSTS_EAST.length;
-    const want = Math.max(6, Math.min(all, Math.round(all * Math.sqrt(np / 8) * Math.pow(mul / (0.6 * 1.35), 0.4))));
+    const want = Math.max(6, Math.min(all, Math.round(towns ? towns * POSTS_PER_TOWN : all * Math.sqrt(np / 8) * Math.pow(mul / (0.6 * 1.35), 0.4))));
     const order = [];
     for (let k = 0; k < Math.max(POSTS_WEST.length, POSTS_EAST.length); k++) order.push(POSTS_WEST[k], POSTS_EAST[k]);
     return new Set(order.filter(Boolean).slice(0, want));
