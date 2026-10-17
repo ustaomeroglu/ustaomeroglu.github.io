@@ -2,6 +2,9 @@
 (function () {
   'use strict';
   const CC = window.CC, UN = CC.UNITS, RULES = CC.RULES;
+  // units in the menus run from the cheapest up: spearmen, archers, swordsmen, knights, cannons
+  const UORDER = [0, 1, 3, 2, 4].filter((k) => k < UN.length);
+  const byOrder = (f) => UORDER.map((k) => f(UN[k], k));
   const $ = (s, el) => (el || document).querySelector(s);
   const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -23,7 +26,7 @@
   const oddsClass = (p) => (p >= 0.7 ? 'good' : p >= 0.45 ? 'mid' : 'bad');
   function compText(u) {
     const parts = [];
-    UN.forEach((d, k) => { if (u[k]) parts.push(`${u[k]} ${(u[k] > 1 ? d.name : d.one).toLowerCase()}`); });
+    UORDER.forEach((k) => { const d = UN[k]; if (u[k]) parts.push(`${u[k]} ${(u[k] > 1 ? d.name : d.one).toLowerCase()}`); });
     return parts.join(', ') || 'nobody';
   }
   const swatch = (c, extra) => `<span class="swatch" style="--c:${c}${extra ? ';' + extra : ''}"></span>`;
@@ -401,7 +404,7 @@
   }
 
   function unitList(u) {
-    return `<div class="unitlist">${UN.map((d, k) => (u[k] ? `<span ${tip(`${d.desc} Attack ${d.att} · defense ${d.def}.`)}><b>${u[k]}</b> ${u[k] > 1 ? d.name : d.one}</span>` : '')).join('')}</div>`;
+    return `<div class="unitlist">${byOrder((d, k) => (u[k] ? `<span ${tip(`${d.desc} Attack ${d.att} · defense ${d.def}.`)}><b>${u[k]}</b> ${u[k] > 1 ? d.name : d.one}</span>` : '')).join('')}</div>`;
   }
 
   function panelArmy(a) {
@@ -418,7 +421,7 @@
     }
     const r = pl.res, P = s.players[s.cur];
     const mov = CC.movable(a);
-    const steppers = UN.map((d, k) => (mov[k] ? `<div class="unit-row"><div class="nm" ${tip(`${d.desc} Attack ${d.att} · defense ${d.def}.`)}>${ICON(d.key)}${d.name}</div>
+    const steppers = byOrder((d, k) => (mov[k] ? `<div class="unit-row"><div class="nm" ${tip(`${d.desc} Attack ${d.att} · defense ${d.def}.`)}>${ICON(d.key)}${d.name}</div>
       <div class="stepper"><button type="button" data-act="det" data-k="${k}" data-d="-1" ${gate(pl.u[k] > 0, `No ${d.name.toLowerCase()} are marching.`, `Keep one ${d.one.toLowerCase()} behind`)} aria-label="Fewer ${d.name}">−</button><output>${pl.u[k]}/${mov[k]}</output><button type="button" data-act="det" data-k="${k}" data-d="1" ${gate(pl.u[k] < mov[k], `All ${mov[k]} ${d.name.toLowerCase()} who can move are already marching.`, `Send one more ${d.one.toLowerCase()}`)} aria-label="More ${d.name}">+</button></div></div>` : '')).join('');
     const over = r.newTiles > r.cap;
     const battles = r.battles.map((b) => `<li><button type="button" data-act="focus" data-i="${b.tile}" ${tip(`Your strength ${b.A.toFixed(1)} against their ${b.D.toFixed(1)}, then each side rolls 2d6 for luck (×0.70 to ×1.30).`)}>${mark(s, b.owner)}${esc(CC.placeName(s, b.tile))}<span class="meta">${CC.sum(b.u) + b.militia} <span class="pill ${oddsClass(b.p)}">${pct(b.p)}</span></span></button></li>`).join('');
@@ -528,7 +531,7 @@
     const tr = CC.training(c);
     if (c.owner === s.cur && (CC.sum(tr.u) || tr.ships || tr.merchants)) {
       // what is in training, each kind with a refund button while it is still your turn
-      const rows = UN.map((d, k) => [k, tr.u[k], tr.u[k] === 1 ? d.one : d.name, d.cost]).filter((x) => x[1])
+      const rows = byOrder((d, k) => [k, tr.u[k], tr.u[k] === 1 ? d.one : d.name, d.cost]).filter((x) => x[1])
         .concat(tr.ships ? [['ships', tr.ships, tr.ships === 1 ? 'Warship' : 'Warships', RULES.shipCost]] : [])
         .concat(tr.merchants ? [['merchants', tr.merchants, tr.merchants === 1 ? 'Merchant ship' : 'Merchant ships', RULES.merchantCost]] : []);
       html += `<h3 ${tip('Recruits train for a turn. They join the garrison, ready to march, at the start of your next turn. If the town falls first, they are lost.')}>In training · ready next turn</h3><div class="buy-list">${rows.map(([k, n, name, cost]) => `<div class="buy"><div class="nm">${ICON(k === 'ships' ? 'warship' : k === 'merchants' ? 'merchant' : UN[k].key)}${n} ${name}</div>
@@ -541,7 +544,8 @@
     if (tab === 'recruit') {
       const left = CC.recruitCap(c) - c.recruited;
       html += `<p class="sub small">${left} of ${CC.recruitCap(c)} recruits left this turn</p><div class="buy-list">`;
-      UN.forEach((d, k) => {
+      UORDER.forEach((k) => {
+        const d = UN[k];
         const r1 = CC.canRecruit(s, s.cur, c.id, k, 1);
         const n5 = Math.min(5, Math.max(1, left));
         const r5 = CC.canRecruit(s, s.cur, c.id, k, n5);
@@ -1578,8 +1582,12 @@
       <div class="field" style="margin-top:14px"><label>Computer turn speed</label><div class="seg" id="speed-seg">${speeds.map(([k, l]) => `<button type="button" data-speed="${k}" aria-pressed="${App.prefs.aiSpeed === k}">${l}</button>`).join('')}</div></div>
       <div class="field"><label for="vol">Sound volume</label><input type="range" id="vol" min="0" max="1" step="0.05" value="${Sfx.vol}"></div>
       ${App.online ? App.online.menuExtra() : '<p class="lead">This game saves itself in this browser after every action.</p>'}
+      ${s ? `<div class="field"><label>Save file</label><div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn small" type="button" id="dl-save" ${tip('Keep the game as a file, to go on later on any device. In an online game, anyone can host it again from the file and the others rejoin.')}>Download save</button><button class="btn small" type="button" id="ld-save" ${tip('Open a saved game file')}>Load a save file</button></div></div>` : ''}
       <div class="modal-actions"><button class="btn" type="button" data-close="tutorial">Tutorial</button><button class="btn" type="button" data-close="rules">Rules</button><button class="btn" type="button" data-close="new">${s ? 'New game' : 'Set up a game'}</button><button class="btn primary" type="button" data-close>Close</button></div>`,
     { onClose: (v) => { if (v === 'rules') showRules(); else if (v === 'tutorial') { if (App.online) App.online.leave(); startTutorial(); } else if (v === 'new') { if (App.online) App.online.leave(); showSetup(); } } });
+    const dl = m.querySelector('#dl-save'), ld = m.querySelector('#ld-save');
+    if (dl) dl.addEventListener('click', downloadSave);
+    if (ld) ld.addEventListener('click', () => { m._close(); pickSaveFile(); });
     m.querySelector('#speed-seg').addEventListener('click', (e) => {
       const b = e.target.closest('[data-speed]');
       if (!b) return;
@@ -1783,6 +1791,7 @@
         <div class="setup-foot"><span class="estimate">${estimate()}</span>
           <button type="button" class="btn ${firstVisit ? 'primary' : ''}" data-act="tutorial">Learn to play · 5 min</button>
           ${savedInfo ? `<button type="button" class="btn" data-act="continue">Continue saved game · ${savedInfo}</button>` : ''}
+          <button type="button" class="btn" data-act="loadfile" ${tip('Open a game saved to a file with “Download save” in the Menu')}>Load a save file</button>
           <button type="button" class="btn ${firstVisit ? '' : 'primary'}" data-act="start">Start game</button></div>
         <div class="online-box" id="online-box"></div>`;
       if (App.online && App.online.renderSetup) App.online.renderSetup($('#online-box', box), cfg, startConfig);
@@ -1836,6 +1845,9 @@
         ov.remove();
         startTutorial();
         return;
+      } else if (act === 'loadfile') {
+        pickSaveFile();
+        return;
       } else if (act === 'continue') {
         try { const st = CC.deserialize(saved.save); ov.remove(); startLoaded(st, null); } catch (err) { hint('That save could not be loaded.'); }
         return;
@@ -1848,6 +1860,47 @@
       savePrefs(); draw();
     });
     draw();
+  }
+
+  // ------------------------------------------------------------ save files
+  function downloadSave() {
+    const s = App.st;
+    if (!s) return;
+    const data = { game: 'kurultay', v: 1, at: Date.now(), save: CC.serialize(s) };
+    const meta = App.online && App.online.meta ? App.online.meta() : null;
+    if (meta) data.online = meta;
+    const stamp = new Date().toISOString().slice(0, 16).replace(/[T:]/g, '-');
+    const name = `kurultay-round-${s.round}-${stamp}.json`;
+    try {
+      const url = URL.createObjectURL(new Blob([JSON.stringify(data)], { type: 'application/json' }));
+      const a = document.createElement('a');
+      a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 4000);
+      hint(`Saved as ${name}`);
+    } catch (e) { hint('This browser could not save the file.'); }
+  }
+  function pickSaveFile() {
+    const inp = document.createElement('input');
+    inp.type = 'file'; inp.accept = '.json,application/json';
+    inp.addEventListener('change', () => {
+      const f = inp.files && inp.files[0];
+      if (!f) return;
+      f.text().then(openSaveText, () => hint('That file could not be read.'));
+    });
+    inp.click();
+  }
+  function openSaveText(txt) {
+    let data, st;
+    try { data = JSON.parse(txt); st = CC.deserialize(data.save || data); } catch (e) { hint('That is not a Kurultay save file.'); return; }
+    const save = data.save || data, meta = data.online || null;
+    const play = () => { closeAllModals(); if (App.online) App.online.leave(); startLoaded(CC.deserialize(save), null); };
+    const canHost = CC.P2P && CC.P2P.hostSaved && CC.P2P.canHost();
+    const humans = st.players.filter((p) => !p.ai).length;
+    if (!canHost || (!meta && humans < 2)) { play(); return; }
+    modal(`<h2>Load a saved game</h2><p class="lead">Round ${st.round}, ${st.players.length} houses: ${st.players.map((p) => esc(p.name)).join(', ')}.</p>
+      <p class="estimate">${meta ? `This save comes from online game <b>${esc(meta.code)}</b>. Host it again and your friends rejoin with the same link; anyone whose browser is new picks their house.` : 'Host it online and send your friends the link: each picks the house they played.'}</p>
+      <div class="modal-actions"><button class="btn" type="button" data-close="here">Play on this device</button><button class="btn primary" type="button" data-close="host">${meta ? `Host ${esc(meta.code)} online` : 'Host it online'}</button></div>`,
+    { onClose: (v) => { if (v === 'here') play(); else if (v === 'host') { closeAllModals(); const ov = $('#setup'); if (ov) ov.remove(); CC.P2P.hostSaved(save, meta); } } });
   }
 
   function hashStr(s) { let h = 2166136261; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; }

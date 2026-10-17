@@ -12,6 +12,25 @@
   } catch (e) { /* storage blocked: English */ }
 
   const TR = [
+    // ---------------------------------------------------------------- save files and taking over an online game
+    ['Load a save file', 'Kayıt dosyası aç'], ['Open a game saved to a file with “Download save” in the Menu', 'Menüdeki “Kaydı indir” ile dosyaya kaydedilmiş bir oyunu aç'],
+    ['Save file', 'Kayıt dosyası'], ['Download save', 'Kaydı indir'], ['Open a saved game file', 'Kayıtlı bir oyun dosyası aç'],
+    ['Keep the game as a file, to go on later on any device. In an online game, anyone can host it again from the file and the others rejoin.', 'Oyunu dosya olarak sakla, sonra herhangi bir cihazda devam et. Çevrim içi oyunda herkes dosyadan oyunu yeniden açabilir, diğerleri tekrar katılır.'],
+    ['Saved as {x}', '{x} olarak kaydedildi'], ['This browser could not save the file.', 'Bu tarayıcı dosyayı kaydedemedi.'], ['That file could not be read.', 'Bu dosya okunamadı.'],
+    ['That is not a Kurultay save file.', 'Bu bir Kurultay kayıt dosyası değil.'], ['Load a saved game', 'Kayıtlı oyunu aç'], ['Round {#}, {#} houses: {x}.', 'Tur {#}, {#} hanedan: {x}.'],
+    ['This save comes from online game <b>{x}</b>. Host it again and your friends rejoin with the same link; anyone whose browser is new picks their house.', 'Bu kayıt <b>{x}</b> çevrim içi oyunundan. Yeniden aç; arkadaşların aynı bağlantıyla geri katılır, tarayıcısı yeni olan kendi hanedanını seçer.'],
+    ['Host it online and send your friends the link: each picks the house they played.', 'Çevrim içi aç ve arkadaşlarına bağlantıyı gönder: her biri oynadığı hanedanı seçer.'],
+    ['Play on this device', 'Bu cihazda oyna'], ['Host {x} online', '{x} oyununu çevrim içi aç'], ['Host it online', 'Çevrim içi aç'],
+    ['Host {x} myself', '{x} oyununu kendim açayım'],
+    ['If the host cannot come back: you host the game from the last turn your browser saw, under the same room code. Your friends reconnect by themselves.', 'Ev sahibi geri dönemiyorsa: oyunu tarayıcının gördüğü son sıradan, aynı oda koduyla sen açarsın. Arkadaşların kendiliğinden yeniden bağlanır.'],
+    ['Checking the room…', 'Oda kontrol ediliyor…'], ['A friend is hosting this game now, from where you left off.', 'Bu oyunu şimdi bir arkadaşın, kaldığınız yerden açıyor.'],
+    ['Room {x} is open', '{x} odası açık'], ['Join it to play your house.', 'Hanedanını oynamak için katıl.'], ['Join room {x}', '{x} odasına katıl'],
+    ['This browser has no copy of that game.', 'Bu tarayıcıda o oyunun kopyası yok.'], ['Checking whether the host is still there…', 'Ev sahibinin hâlâ orada olup olmadığına bakılıyor…'],
+    ['The host is still online.', 'Ev sahibi hâlâ çevrim içi.'], ['You are hosting {x} now. Your friends reconnect by themselves; keep this tab open.', 'Artık {x} oyununu sen açıyorsun. Arkadaşların kendiliğinden yeniden bağlanır; bu sekmeyi açık tut.'],
+    ['Someone is already hosting this game.', 'Bu oyunu zaten biri açıyor.'], ['{x} is back.', '{x} geri döndü.'],
+    ['Which house is yours?', 'Hangi hanedan senin?'], ['This game goes on from a save. Pick the house you played.', 'Bu oyun bir kayıttan devam ediyor. Oynadığın hanedanı seç.'], ['Just watch', 'Sadece izle'],
+    ['Host the game myself', 'Oyunu ben açayım'], ['That save could not be loaded.', 'Bu kayıt açılamadı.'],
+    ['If the host cannot come back, you can host from the last turn you saw, under the same room code. Your friends reconnect by themselves.', 'Ev sahibi geri dönemezse, oyunu gördüğün son sıradan aynı oda koduyla sen açabilirsin. Arkadaşların kendiliğinden yeniden bağlanır.'],
     // ---------------------------------------------------------------- merchant ships, trade set-up, rebuilding, right-click
     ['Merchant ships and warships cannot share a tile.', 'Ticaret gemileri ile savaş gemileri aynı karede duramaz.'], ['Merchant ships cannot blockade.', 'Ticaret gemileri abluka yapamaz.'],
     ['A harbor launches at most {#} ships a turn.', 'Bir liman sırada en çok {#} gemi indirir.'], ['A port launches at most {#} ships a turn.', 'Bir iskele sırada en çok {#} gemi indirir.'],
