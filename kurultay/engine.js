@@ -46,7 +46,7 @@
     harborCost: 100, stablesCost: 40, barracksCost: 35, foundryCost: 60,
     swordVsSpear: 0.3, cannonCity: 4, cannonTower: 2.5, cannonSlow: 1,
     recruitBase: 6, recruitPerWall: 2,
-    structureDef: 1.15, riverAtt: 0.85, amphibAtt: 0.8,
+    riverAtt: 0.85, amphibAtt: 0.8,
     knightVsArcher: 0.4, knightCityMult: 0.6, knightRoughMult: 0.7, knightSpearPenalty: 0.45, knightPikeDef: 0.2,
     baseMP: 5, cavalryMP: 7, navalCost: 3, navalRange: 14, navalHop: false,
     zocArmy: 0, zocTown: 1,  // armies hold only their own tile; towns, castles and outposts the 6 around them
@@ -1288,7 +1288,8 @@
 
   function battleCtx(st, i, naval) {
     const t = st.tiles[i], c = cityAt(st, i);
-    const structure = t.b === 'tower' ? 'tower' : t.b === 'farm' || t.b === 'mine' ? 'palisade' : null;
+    // only outposts (and towns) help their defenders; farms and mines give no cover
+    const structure = t.b === 'tower' ? 'tower' : null;
     return { terrain: t.t, river: t.river, city: c ? { walls: c.walls } : null, structure, amphibious: !!naval };
   }
 
@@ -1320,7 +1321,6 @@
     if (td !== 1) dMods.push({ label: TERRAIN[ctx.terrain].name, mult: td });
     if (ctx.city) dMods.push({ label: ctx.city.walls ? `Walls level ${ctx.city.walls}` : 'Town palisade', mult: RULES.walls.mult[ctx.city.walls] });
     else if (ctx.structure === 'tower') dMods.push({ label: 'Outpost', mult: RULES.outpostDef });
-    else if (ctx.structure) dMods.push({ label: 'Palisade', mult: RULES.structureDef });
     const A = aBase * aMods.reduce((m, x) => m * x.mult, 1);
     const D = dBase * dMods.reduce((m, x) => m * x.mult, 1);
     return { A, D, aBase, dBase, aMods, dMods, kMult, dkMult, swordMult, cannonMult, militia };
