@@ -41,7 +41,7 @@
 
   const RULES = {
     startGold: 70,
-    capitalIncome: 15, cityIncome: 6, marketIncome: 5, marketTrade: 1, marketTradeMax: 6, // each market level: +1 gold on every trade agreement, at most +6 each
+    capitalIncome: 18, cityIncome: 9, marketIncome: 5, marketLevels: [5, 6, 8], marketTrade: 1, marketTradeMax: 6, // each market level: +1 gold on every trade agreement, at most +6 each
     farmIncome: 4, riverFarmBonus: 2, mineIncome: 9,
     farmCost: 20, mineCost: 35, castleCost: 300,
     outpostCost: 40, outpostUpkeep: 1, outpostDef: 1.32, outpostMilitia: 2, outpostSpacing: 2,
@@ -431,6 +431,7 @@
     let posts = [], regions = [], lanes = [];
     if (world) ({ posts, regions, lanes } = colonyPosts(W, H, nb, t, shape.col, gen >= 6 ? worldPostPick(np, mul, gen >= 7 ? starts.length + neutrals.length : 0) : null));
     else if (gen >= 2) { posts = placeMarkets(W, H, nb, t, np, seed); lanes = realmLanes(W, H, nb, t, posts, seed); }
+    if (gen >= 7) for (const p of posts) p.guard = postGuard(p);
     return { W, H, seed, gen, kind: world ? 'world' : 'realm', t, river, gold, elev: Array.from(elev), variation, rivers, starts, neutrals, names, posts, regions, lanes, nb6, nb };
   }
 
@@ -695,6 +696,12 @@
   // gen 7: in step with the towns on the map at the start (8 houses on a normal map: 19 towns, all 18 posts);
   // gen 6 used the houses and the map size directly
   const POSTS_PER_TOWN = 18 / 19;
+  // trading posts pay three quarters of the sketch's value (about one town's gold for a merchant ship)
+  const POST_VALUE = 0.75;
+  // gen 7: the richest posts are defended by local forts and war canoes, measured in warships. The Asian lands hold
+  // two, the best posts elsewhere one; poorer posts are open. A fleet must beat the defences once to trade there.
+  const GUARDED_LANDS = new Set(['Arabia', 'India', 'Cathay']);
+  const postGuard = (p) => (p.colony ? (GUARDED_LANDS.has(p.colony) ? (p.value >= 11 ? 2 : 1) : p.value >= 12 ? 1 : 0) : p.value >= 12 ? 1 : 0);
   function worldPostPick(np, mul, towns) {
     const all = POSTS_WEST.length + POSTS_EAST.length;
     const want = Math.max(6, Math.min(all, Math.round(towns ? towns * POSTS_PER_TOWN : all * Math.sqrt(np / 8) * Math.pow(mul / (0.6 * 1.35), 0.4))));
@@ -712,7 +719,7 @@
         const tile = worldWaterNear(W, H, ocean, px, py, (i) => nb[i].some((j) => col[j] === ci) && !nb[i].some((j) => t[j] !== 'water' && col[j] !== ci) && !taken.has(i));
         if (tile < 0) continue;
         postOf[name] = tile; taken.add(tile);
-        if (!keep || keep.has(name)) posts.push({ tile, value, name, colony: c.name });
+        if (!keep || keep.has(name)) posts.push({ tile, value: Math.round(value * POST_VALUE), name, colony: c.name });
       }
       let sx = 0, sy = 0; for (const i of tiles) { const [x, y] = worldXY(W, H, i); sx += x; sy += y; }
       sx /= tiles.length; sy /= tiles.length;
@@ -918,7 +925,7 @@
         if (d > bd) { bd = d; best = c; }
       }
       if (best < 0 || (posts.length && bd < Math.min(W, H) / 3)) break;
-      posts.push({ tile: best, value: 12 + Math.floor(rng() * 6), name: MARKET_NAMES[k % MARKET_NAMES.length] });
+      posts.push({ tile: best, value: 9 + Math.floor(rng() * 5), name: MARKET_NAMES[k % MARKET_NAMES.length] });
     }
     return posts;
   }
@@ -963,6 +970,8 @@
     const map = generateMap(np, scale, seed, gen, kind);
     const settings = { np, size, scale, rounds: cfg.rounds || 0, timer: cfg.timer || 0, tutorial: !!cfg.tutorial, gen, map: kind };
     const st = baseState(map, settings);
+    st.guards = {};
+    for (const p of map.posts || []) if (p.guard) st.guards[p.tile] = p.guard;
     cfg.players.forEach((p, i) => {
       st.players.push({
         id: i, name: p.name || HOUSE_NAMES[i], color: p.color != null ? p.color : i, ai: !!p.ai, flag: fullFlag(p.flag),
@@ -1604,9 +1613,15 @@
   }
 
   // ---------------------------------------------------------------- economy
+  // a town's own gold: the base, plus each market level (+5, +6, +8)
+  function townIncome(c) {
+    let g = c.capital ? RULES.capitalIncome : RULES.cityIncome;
+    for (let k = 0; k < (c.market || 0); k++) g += RULES.marketLevels[k] || RULES.marketIncome;
+    return g;
+  }
   function income(st, p) {
     let cities = 0, farms = 0, mines = 0, upkeep = 0;
-    for (const c of st.cities) if (c.owner === p) cities += (c.capital ? RULES.capitalIncome : RULES.cityIncome) + c.market * RULES.marketIncome;
+    for (const c of st.cities) if (c.owner === p) cities += townIncome(c);
     let outposts = 0, ports = 0;
     for (const t of st.tiles) if (t.owner === p) {
       if (t.b === 'farm') farms += RULES.farmIncome + (t.river ? RULES.riverFarmBonus : 0);
@@ -1915,6 +1930,8 @@
   const shipCostOf = (kind) => (kind === 'merchant' ? RULES.merchantCost : RULES.shipCost);
   const trainKey = (kind) => (kind === 'merchant' ? 'merchants' : 'ships');
   // turns a fleet has lain at its post (fleets from older saves count as settled)
+  // what still defends a trading post (in warships), 0 when it is open
+  const guardAt = (st, tile) => (st.guards && st.guards[tile]) || 0;
   const stayOf = (f) => (f.stay == null ? RULES.postSetup + 1 : f.stay);
   const getFleet = (st, id) => (st.fleets || []).find((f) => f.id === id) || null;
   const isWater = (st, i) => st.tiles[i].t === 'water';
@@ -2012,8 +2029,10 @@
     const foe = fleetAt(st, dest), prey = !foe && seaArmyAt(st, dest);
     if (prey && prey.owner === f.owner) errors.push('Your own soldiers are aboard ships there.');
     if (mate && mate.owner === f.owner && isMerchant(mate) !== isMerchant(f)) errors.push('Merchant ships and warships cannot share a tile.');
+    const guard = !foe && !prey ? guardAt(st, dest) : 0;
     const battle = foe && foe.owner !== f.owner ? { owner: foe.owner, n: foe.n, merchant: isMerchant(foe), p: navalOdds(shipPow(f, n), shipPow(foe)).p }
-      : prey && prey.owner !== f.owner ? { owner: prey.owner, n: sum(prey.u), p: transportOdds(shipPow(f, n), prey.u).p, transport: true } : null;
+      : prey && prey.owner !== f.owner ? { owner: prey.owner, n: sum(prey.u), p: transportOdds(shipPow(f, n), prey.u).p, transport: true }
+      : guard ? { owner: -1, n: guard, p: navalOdds(shipPow(f, n), guard).p, guard: true } : null;
     return { valid: !errors.length, errors, path, battle, dest, fleetId, n };
   }
   // a and d in warship-equivalents (shipPow). Luck swings wider at sea than on land: wind and weather.
@@ -2125,6 +2144,17 @@
     } else { const there = fleetAt(st, rep.end); rep.fleet = there && there.owner === mover.owner ? there.id : null; }
     return rep;
   }
+  // where a beaten fleet falls back to: the last tile of its course it can stand on (free water, or its own ships of
+  // the same kind, which it rejoins), else where it set out from
+  function fallBack(st, f, plan, origin) {
+    for (let k = plan.path.length - 2; k >= 0; k--) {
+      const j = plan.path[k];
+      if (seaArmyAt(st, j)) continue;
+      const o = (st.fleets || []).find((x) => x !== f && x.tile === j);
+      if (!o || (o.owner === f.owner && isMerchant(o) === isMerchant(f))) return j;
+    }
+    return origin;
+  }
   function sailFleet(st, f, dest, plan) {
     const me = f.owner, P = st.players[me];
     const rep = { me, origin: f.tile, path: plan.path, battle: null, end: dest };
@@ -2145,7 +2175,7 @@
       const aAfter = win ? f.n : Math.max(0, sink(f.n, lf.loser));
       const dAfter = sum(prey.u);
       f.used = SPENT; f.n = aAfter;
-      f.tile = plan.path.length > 1 ? plan.path[plan.path.length - 2] : rep.origin;
+      f.tile = fallBack(st, f, plan, rep.origin);
       if (f.n <= 0) st.fleets = st.fleets.filter((x) => x !== f);
       prey.used = SPENT;
       if (!dAfter) removeArmy(st, prey);
@@ -2157,6 +2187,35 @@
       if (win) { P.stats.won++; if (st.players[prey.owner]) st.players[prey.owner].stats.lost++; } else { P.stats.lost++; if (st.players[prey.owner]) st.players[prey.owner].stats.won++; }
       log(st, win ? `${P.name}'s warships fell on ${nameOf(st, prey.owner)}'s transports: ${count(drowned, 'soldier', 'soldiers')} drowned${dAfter ? '' : ', none survived'}.`
         : `${nameOf(st, prey.owner)}'s soldiers fought off ${P.name}'s warships from their transports.`, 'battle', [me, prey.owner]);
+      return rep;
+    }
+    const guard = !foe ? guardAt(st, dest) : 0;
+    if (guard) {
+      // the defences of a trading post: beat them once and the post is open for good
+      const post = (st._posts || []).find((x) => x.tile === dest), where = post ? post.name : placeName(st, dest);
+      const roll = () => 1 + Math.floor(rand(st) * 6);
+      const ad = [roll(), roll()], dd = [roll(), roll()];
+      const o = navalOdds(shipPow(f), guard);
+      const Ae = o.A * seaLuck(ad[0] + ad[1]), De = o.D * seaLuck(dd[0] + dd[1]);
+      const win = Ae > De, lf = lossFracs(win ? Ae / De : De / Ae);
+      const sink = (n, frac) => (frac >= 1 ? n : n - Math.min(n, Math.floor(n * frac + rand(st))));
+      const aAfter = Math.max(win ? 1 : 0, sink(f.n, win ? lf.winner : lf.loser));
+      const dAfter = win ? 0 : Math.max(1, sink(guard, lf.winner));
+      rep.battle = { att: f.n, def: guard, attAfter: aAfter, defAfter: dAfter, ad, dd, A: o.A, D: o.D, Ae, De, win, odds: o.p, defender: -1, guard: true, where };
+      f.used = SPENT; f.n = aAfter;
+      if (win) {
+        delete st.guards[dest];
+        f.tile = dest;
+        P.stats.won++;
+        log(st, `${P.name}'s fleet broke the defences of ${where} (${Math.round(o.p * 100)}% odds). The post is open to trade.`, 'battle', [me]);
+      } else {
+        st.guards[dest] = dAfter;
+        P.stats.lost++;
+        if (f.n <= 0) st.fleets = st.fleets.filter((x) => x !== f);
+        else f.tile = fallBack(st, f, plan, rep.origin);
+        rep.end = f.n > 0 ? f.tile : -1;
+        log(st, `The defences of ${where} drove off ${P.name}'s fleet (${Math.round(o.p * 100)}% odds for the attacker).`, 'battle', [me]);
+      }
       return rep;
     }
     if (foe) {
@@ -2174,16 +2233,17 @@
         st.fleets = st.fleets.filter((x) => x !== foe);
         rep.battle.fate = 'sunk';
         P.stats.won++; if (st.players[foe.owner]) st.players[foe.owner].stats.lost++;
-        if (dAfter > 0) { const home = harborWaterOf(st, foe.owner); if (home != null && !fleetAt(st, home)) { placeFleet(st, foe.owner, home, dAfter, SPENT, foe.kind); rep.battle.fate = 'fled'; } }
-        if (rep.battle.fate === 'sunk') rep.battle.defAfter = 0;
+        // the winner takes the water first, so the beaten ships cannot flee onto it
         f.n = aAfter; f.tile = dest;
+        if (dAfter > 0) { const home = harborWaterOf(st, foe.owner); if (home != null && !fleetAt(st, home) && !seaArmyAt(st, home)) { placeFleet(st, foe.owner, home, dAfter, SPENT, foe.kind); rep.battle.fate = 'fled'; } }
+        if (rep.battle.fate === 'sunk') rep.battle.defAfter = 0;
         log(st, `${P.name}'s fleet won a sea battle against ${nameOf(st, foe.owner)} (${Math.round(o.p * 100)}% odds).`, 'battle', [me, foe.owner]);
       } else {
         P.stats.lost++; if (st.players[foe.owner]) st.players[foe.owner].stats.won++;
         foe.n = dAfter;
         f.n = aAfter;
         if (f.n <= 0) st.fleets = st.fleets.filter((x) => x !== f);
-        else f.tile = plan.path.length > 1 ? plan.path[plan.path.length - 2] : rep.origin;
+        else f.tile = fallBack(st, f, plan, rep.origin);
         rep.end = f.n > 0 ? f.tile : -1;
         log(st, `${nameOf(st, foe.owner)}'s fleet held the sea against ${P.name} (${Math.round(o.p * 100)}% odds for the attacker).`, 'battle', [me, foe.owner]);
       }
@@ -2294,6 +2354,7 @@
     if (left <= 0) errors.push('These ships have no moves left this turn.');
     if (isWater(st, dest)) {
       if (fleetAt(st, dest) || seaArmyAt(st, dest)) errors.push(fleetAt(st, dest) && fleetAt(st, dest).owner !== me ? 'Transports cannot attack warships.' : 'Another ship is there.');
+      else if (guardAt(st, dest)) errors.push('Local defences hold this trading post. Warships must clear them first.');
       else if (!(r.dist[dest] > 0)) errors.push(`Too far: these ships have ${left} move${left === 1 ? '' : 's'} left.`);
       return { valid: !errors.length, errors, path: r.dist[dest] > 0 ? route(dest) : [], land: false, dest };
     }
@@ -2514,9 +2575,11 @@
     st.dip.offers = st.dip.offers.filter((o) => !(o.from === p && o.round < st.round) && st.players[o.to].alive && st.players[o.from].alive);
     for (const t of st.dip.tributes) {
       if (t.from !== p || t.left <= 0) continue;
-      const pay = Math.min(t.amount, st.players[p].gold);
+      // an empty (or overdrawn) treasury pays nothing: never a negative tribute
+      const pay = Math.max(0, Math.min(t.amount, st.players[p].gold));
       st.players[p].gold -= pay; st.players[t.to].gold += pay; t.left--;
-      log(st, `${st.players[p].name} paid ${pay} gold of tribute to ${st.players[t.to].name}${t.left ? ` (${t.left} more)` : ' (the last payment)'}.`, 'dip', [p, t.to]);
+      if (pay > 0) log(st, `${st.players[p].name} paid ${pay} gold of tribute to ${st.players[t.to].name}${t.left ? ` (${t.left} more)` : ' (the last payment)'}.`, 'dip', [p, t.to]);
+      else log(st, `${st.players[p].name} could not pay its tribute to ${st.players[t.to].name} this turn${t.left ? ` (${t.left} more)` : ''}.`, 'dip', [p, t.to]);
     }
     st.dip.tributes = st.dip.tributes.filter((t) => t.left > 0 && st.players[t.from].alive && st.players[t.to].alive);
   }
@@ -2576,7 +2639,7 @@
       ports: st.ports || {}, builds: st.builds || [],
       cities: st.cities, armies: st.armies, fleets: st.fleets || [], players: st.players,
       round: st.round, maxRounds: st.maxRounds, cur: st.cur, rng: st.rng, nextId: st.nextId,
-      log: st.log.slice(-120), logSeq: st.logSeq, over: st.over, turnNo: st.turnNo, nameIdx: st.nameIdx, dip: st.dip, phase: st.phase || 'play', pick: st.pick || null, occupied: st.occupied || {},
+      log: st.log.slice(-120), logSeq: st.logSeq, over: st.over, turnNo: st.turnNo, nameIdx: st.nameIdx, dip: st.dip, phase: st.phase || 'play', pick: st.pick || null, occupied: st.occupied || {}, guards: st.guards || {},
     };
   }
 
@@ -2594,14 +2657,14 @@
     st.cities = clone(o.cities); st.armies = clone(o.armies); st.players = clone(o.players); st.fleets = clone(o.fleets || []); st.ports = clone(o.ports || {}); st.builds = clone(o.builds || []);
     for (const c of st.cities) st.tiles[c.tile].city = c.id;
     for (const a of st.armies) { if (a.used == null) a.used = a.moved ? SPENT : 0; if (a.took == null) a.took = 0; delete a.moved; a.u = normU(a.u); delete a.fresh; }
-    Object.assign(st, { occupied: clone(o.occupied || {}), phase: o.phase || 'play', pick: o.pick ? clone(o.pick) : null, round: o.round, maxRounds: o.maxRounds, cur: o.cur, rng: o.rng, nextId: o.nextId, log: clone(o.log || []), logSeq: o.logSeq, over: o.over ? clone(o.over) : null, turnNo: o.turnNo, nameIdx: o.nameIdx, dip: o.dip ? clone(o.dip) : { peace: {}, offers: [], tributes: [], nextOffer: 1 } });
+    Object.assign(st, { guards: clone(o.guards || {}), occupied: clone(o.occupied || {}), phase: o.phase || 'play', pick: o.pick ? clone(o.pick) : null, round: o.round, maxRounds: o.maxRounds, cur: o.cur, rng: o.rng, nextId: o.nextId, log: clone(o.log || []), logSeq: o.logSeq, over: o.over ? clone(o.over) : null, turnNo: o.turnNo, nameIdx: o.nameIdx, dip: o.dip ? clone(o.dip) : { peace: {}, offers: [], tributes: [], nextOffer: 1 } });
     return st;
   }
 
   Object.assign(CC, {
     UNITS, NU, Z, normU, TERRAIN, RULES, COLORS, REBEL, FLAG_W, FLAG_H, validFlag, fullFlag, flagPalette, flagOf, HOUSE_NAMES, SIZES, DICE,
     mulberry32, rand, hexDistW, hexDist, disk, mapDims, generateMap, tryGenerate,
-    newGame, passable, fatigue, MAP_GEN, canDismantle, dismantle, isMerchant, shipPow, shipCostOf, stayOf, fleetAt, getFleet, canRecruitShips, recruitShips, fleetReach, fleetMovesLeft, planFleet, moveFleet, navalOdds,
+    newGame, passable, fatigue, MAP_GEN, guardAt, townIncome, canDismantle, dismantle, isMerchant, shipPow, shipCostOf, stayOf, fleetAt, getFleet, canRecruitShips, recruitShips, fleetReach, fleetMovesLeft, planFleet, moveFleet, navalOdds,
     bombardTargets, bombard, sailable, canPickStart, pickStart, aiPickStart, finishBuilds, setBlockade, cancelBuild, pendingAt, pendingIn, routesThrough, harborSites, portOf, canPortShips, portShips, cancelPortShips, transportOdds, seaArmyAt, vesselAt, embarkCost, canEmbark, embark, seaReach, planSail, sailArmy, landingSpots, isWater, tradeRoutes, hasTrade, atWar, atPeace, peaceUntil, checkOffer, proposeOffer, answerOffer, describeOffer, relations, armyAt, getArmy, cityAt, isCoastal, colorOf, nameOf, armyStats, placeName, sum,
     stepCost, isHarborTile, dijkstra, reach, movesLeft, landLeft, movable, marchLeft, training, trainingOf, cancelTraining, zocSources, zocFor, zocTiles, inZoc, SPENT, defenderAt, battleCtx, powers, odds, lossFracs, luck,
     planCampaign, executeCampaign, income, farmSlots, canBuild, build, upgradeInfo, upgrade,

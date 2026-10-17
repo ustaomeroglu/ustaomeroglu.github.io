@@ -808,6 +808,26 @@
     }
   }
 
+  // a trading post's local defences: one small stone fort with a red pennant per warship of strength
+  function drawGuard(g, x, y, S, n) {
+    g.save(); g.translate(x, y);
+    for (let k = 0; k < n; k++) {
+      const ox = S * (0.6 + k * 0.4), w = S * 0.32, h = S * 0.46, base = S * 0.24;
+      g.beginPath();
+      g.moveTo(ox - w / 2, base); g.lineTo(ox - w / 2, base - h); g.lineTo(ox - w / 2 + w * 0.22, base - h); g.lineTo(ox - w / 2 + w * 0.22, base - h - w * 0.2);
+      g.lineTo(ox - w * 0.11, base - h - w * 0.2); g.lineTo(ox - w * 0.11, base - h); g.lineTo(ox + w * 0.11, base - h); g.lineTo(ox + w * 0.11, base - h - w * 0.2);
+      g.lineTo(ox + w / 2 - w * 0.22, base - h - w * 0.2); g.lineTo(ox + w / 2 - w * 0.22, base - h); g.lineTo(ox + w / 2, base - h); g.lineTo(ox + w / 2, base); g.closePath();
+      g.fillStyle = '#b9a785'; g.fill(); g.lineWidth = Math.max(1, S * 0.05); g.strokeStyle = PAL.ink; g.stroke();
+      g.fillStyle = PAL.ink; g.fillRect(ox - w * 0.12, base - h * 0.42, w * 0.24, h * 0.42);
+      // pennant
+      g.beginPath(); g.moveTo(ox, base - h - w * 0.2); g.lineTo(ox, base - h - S * 0.26); g.lineWidth = Math.max(1, S * 0.04); g.stroke();
+      g.beginPath(); g.moveTo(ox, base - h - S * 0.26); g.lineTo(ox + S * 0.16, base - h - S * 0.2); g.lineTo(ox, base - h - S * 0.14); g.closePath();
+      g.fillStyle = '#c4422f'; g.fill();
+    }
+    g.restore();
+  }
+  CC.drawGuard = drawGuard;
+
   // a colonial trading post: a moored buoy with an anchor, where a fleet docks to trade
   function drawPort(g, x, y, S, name, value, z) {
     g.save(); g.translate(x, y);
@@ -968,7 +988,7 @@
       g.lineWidth = 3; g.strokeStyle = 'rgba(40,28,12,0.55)'; const rn = CC.tr ? CC.tr(reg.name) : reg.name; g.strokeText(rn, p.x, p.y); g.fillStyle = 'rgba(250,236,200,0.9)'; g.fillText(rn, p.x, p.y);
       g.restore();
     }
-    for (const post of st._posts || []) { const p = this.center(post.tile); (post.colony ? drawPort : drawMarket)(g, p.x, p.y, S, post.name, post.value, cam.z); }
+    for (const post of st._posts || []) { const p = this.center(post.tile); (post.colony ? drawPort : drawMarket)(g, p.x, p.y, S, post.name, post.value, cam.z); const gd = CC.guardAt ? CC.guardAt(st, post.tile) : 0; if (gd) drawGuard(g, p.x, p.y, S, gd); }
     // fleet course preview and bombardment targets
     if (ov.course && ov.course.length > 1) {
       g.beginPath();

@@ -597,7 +597,8 @@
         if (CC.transportOdds(CC.shipPow(f), a.u).p >= 0.6) { dest = a.tile; break; }
       }
       // otherwise the nearest free market, or the water closest to it
-      const posts = (st._posts || []).filter((p) => !CC.fleetAt(st, p.tile) && p.tile !== f.tile);
+      // free posts, or defended ones this fleet can likely take
+      const posts = (st._posts || []).filter((p) => !CC.fleetAt(st, p.tile) && p.tile !== f.tile && (!CC.guardAt(st, p.tile) || CC.navalOdds(CC.shipPow(f), CC.guardAt(st, p.tile)).p >= (CC.isMerchant(f) ? 0.85 : 0.65)));
       const onPost = (st._posts || []).some((p) => p.tile === f.tile);
       if (dest < 0 && posts.length && !onPost) {
         const post = posts.sort((a, b) => CC.hexDist(st, a.tile, f.tile) - CC.hexDist(st, b.tile, f.tile))[0];
