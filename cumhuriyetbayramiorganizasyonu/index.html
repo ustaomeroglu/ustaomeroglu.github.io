@@ -1,0 +1,916 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<meta name="theme-color" content="#c8102e">
+<title>Reception Check-in</title>
+<style>
+:root {
+  --bg: #f5f3f0;
+  --card: #ffffff;
+  --ink: #1c1b1f;
+  --muted: #6c6a72;
+  --line: #e5e1dc;
+  --soft: #efece8;
+  --red: #c8102e;
+  --red-ink: #ffffff;
+  --red-soft: #fbe7ea;
+  --green: #1d7f4a;
+  --green-soft: #e3f3ea;
+  --amber: #a46207;
+  --amber-soft: #fdf1dc;
+  --note: #fff7e0;
+  --note-line: #f0d68a;
+  --shadow: 0 1px 2px rgba(0,0,0,.05), 0 6px 24px rgba(0,0,0,.07);
+  --radius: 14px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #141316; --card: #1f1e22; --ink: #f1eff3; --muted: #a29fa8; --line: #34323a; --soft: #2a2830;
+    --red: #e5394f; --red-soft: #3a1a20; --green: #4cc287; --green-soft: #173325; --amber: #f0b44c; --amber-soft: #3a2c12;
+    --note: #2f2915; --note-line: #6b5a22; --shadow: 0 1px 2px rgba(0,0,0,.4), 0 6px 24px rgba(0,0,0,.35);
+  }
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; background: var(--bg); color: var(--ink); }
+body {
+  font: 16px/1.4 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased; -webkit-tap-highlight-color: transparent;
+  padding-bottom: calc(72px + env(safe-area-inset-bottom));
+}
+button, input, select { font: inherit; color: inherit; }
+button { cursor: pointer; }
+[hidden] { display: none !important; }
+.num { font-variant-numeric: tabular-nums; }
+
+/* Lock screen */
+#lock { min-height: 100dvh; display: grid; place-items: center; padding: 24px 16px; }
+.lock-card { width: 100%; max-width: 360px; text-align: center; }
+.emblem { width: 64px; height: 64px; border-radius: 16px; background: var(--red); display: grid; place-items: center; margin: 0 auto 18px; box-shadow: var(--shadow); }
+.lock-card h1 { font-size: 22px; margin: 0 0 4px; letter-spacing: -.01em; }
+.lock-card p { color: var(--muted); margin: 0 0 22px; font-size: 14px; }
+.field { width: 100%; height: 52px; border: 1px solid var(--line); border-radius: 12px; background: var(--card); padding: 0 16px; font-size: 17px; outline: none; }
+.field:focus { border-color: var(--red); box-shadow: 0 0 0 3px var(--red-soft); }
+.btn { height: 50px; border-radius: 12px; border: 1px solid var(--line); background: var(--card); padding: 0 18px; font-weight: 600; }
+.btn-primary { background: var(--red); border-color: var(--red); color: var(--red-ink); }
+.btn-green { background: #1d7f4a; border-color: #1d7f4a; color: #fff; }
+.btn-block { width: 100%; }
+.lock-card .btn { margin-top: 12px; }
+.err { color: var(--red); font-size: 14px; min-height: 20px; margin-top: 10px; }
+
+/* Header */
+.top { position: sticky; top: 0; z-index: 5; background: color-mix(in srgb, var(--bg) 92%, transparent); backdrop-filter: saturate(1.4) blur(12px); -webkit-backdrop-filter: saturate(1.4) blur(12px); padding: calc(10px + env(safe-area-inset-top)) 16px 10px; border-bottom: 1px solid var(--line); }
+.top-row { display: flex; align-items: center; gap: 10px; }
+.brand { display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 16px; flex: 1; min-width: 0; }
+.brand .mini { width: 26px; height: 26px; border-radius: 7px; background: var(--red); display: grid; place-items: center; flex: none; }
+.brand span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sync { display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 10px; border-radius: 999px; border: 1px solid var(--line); background: var(--card); font-size: 12px; font-weight: 600; color: var(--muted); }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+.sync.ok .dot { background: var(--green); }
+.sync.busy .dot { background: var(--amber); }
+.sync.bad .dot { background: var(--red); }
+.progress { display: flex; align-items: center; gap: 10px; margin-top: 10px; font-size: 13px; color: var(--muted); }
+.bar { flex: 1; height: 6px; border-radius: 3px; background: var(--soft); overflow: hidden; }
+.bar i { display: block; height: 100%; background: var(--green); border-radius: 3px; transition: width .3s; }
+.progress b { color: var(--ink); }
+.search { position: relative; margin-top: 10px; }
+.search input { width: 100%; height: 48px; border-radius: 12px; border: 1px solid var(--line); background: var(--card); padding: 0 44px 0 42px; font-size: 17px; outline: none; -webkit-appearance: none; }
+.search input:focus { border-color: var(--red); box-shadow: 0 0 0 3px var(--red-soft); }
+.search input::-webkit-search-cancel-button, .search input::-webkit-search-decoration { -webkit-appearance: none; display: none; }
+.search svg { position: absolute; left: 13px; top: 14px; color: var(--muted); }
+.search .clear { position: absolute; right: 6px; top: 6px; width: 36px; height: 36px; border: 0; background: none; color: var(--muted); font-size: 22px; line-height: 1; }
+.chips { display: flex; gap: 8px; margin-top: 10px; overflow-x: auto; scrollbar-width: none; }
+.chip { flex: none; height: 32px; padding: 0 12px; border-radius: 999px; border: 1px solid var(--line); background: var(--card); font-size: 14px; font-weight: 600; color: var(--muted); }
+.chip[aria-pressed="true"] { background: var(--ink); border-color: var(--ink); color: var(--bg); }
+
+main { padding: 12px 16px 24px; max-width: 720px; margin: 0 auto; }
+.top-inner { max-width: 720px; margin: 0 auto; }
+.empty { text-align: center; color: var(--muted); padding: 40px 10px; }
+.banner { background: var(--note); border: 1px solid var(--note-line); border-radius: 12px; padding: 10px 12px; font-size: 14px; margin-bottom: 12px; }
+
+/* Guest rows */
+.list { display: flex; flex-direction: column; gap: 8px; }
+.row { display: flex; align-items: center; gap: 12px; width: 100%; text-align: left; background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 12px 12px 12px 14px; min-height: 64px; }
+.row:active { transform: scale(.995); background: var(--soft); }
+.row-main { flex: 1; min-width: 0; }
+.row-name { font-weight: 650; font-size: 17px; line-height: 1.25; overflow-wrap: anywhere; }
+.row-sub { color: var(--muted); font-size: 13px; margin-top: 2px; }
+.row-sub em { font-style: normal; color: var(--red); font-weight: 600; }
+.tbadge { flex: none; min-width: 44px; height: 44px; border-radius: 12px; background: var(--soft); display: grid; place-items: center; line-height: 1; text-align: center; }
+.tbadge small { display: block; font-size: 9px; font-weight: 700; letter-spacing: .06em; color: var(--muted); margin-bottom: 2px; }
+.tbadge b { font-size: 18px; }
+.pill { flex: none; min-width: 52px; height: 30px; padding: 0 9px; border-radius: 999px; display: inline-flex; align-items: center; justify-content: center; gap: 4px; font-size: 14px; font-weight: 700; border: 1px solid var(--line); color: var(--muted); }
+.pill.part { background: var(--amber-soft); border-color: transparent; color: var(--amber); }
+.pill.full { background: var(--green-soft); border-color: transparent; color: var(--green); }
+
+/* Tables */
+.planlink { display: flex; align-items: center; justify-content: center; text-decoration: none; margin-bottom: 12px; }
+.map { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 8px; margin-bottom: 12px; }
+.map svg { display: block; width: 100%; height: auto; }
+.map .t { cursor: pointer; }
+.tcard { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); margin-bottom: 8px; overflow: hidden; scroll-margin-top: 220px; }
+.tcard summary { list-style: none; display: flex; align-items: center; gap: 12px; padding: 12px 14px; cursor: pointer; }
+.tcard summary::-webkit-details-marker { display: none; }
+.tcard .tnum { width: 44px; height: 44px; border-radius: 50%; background: var(--soft); display: grid; place-items: center; font-weight: 800; font-size: 18px; flex: none; }
+.tcard[data-spare] .tnum { background: none; border: 2px dashed var(--line); color: var(--muted); }
+.tcard .tinfo { flex: 1; }
+.tcard .tinfo b { display: block; }
+.tcard .tinfo span { color: var(--muted); font-size: 13px; }
+.tcard ul { list-style: none; margin: 0; padding: 0 8px 8px; }
+.tcard li button { width: 100%; display: flex; align-items: center; gap: 10px; border: 0; background: none; text-align: left; padding: 10px 6px; border-top: 1px solid var(--line); }
+.tcard li button > span:first-child { flex: 1; }
+.tcard[open] .tinfo span { display: none; }
+.tcard li small { color: var(--muted); }
+
+/* Totals */
+.cards { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 12px; }
+.stat { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px; }
+.stat small { color: var(--muted); font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; }
+.stat b { display: block; font-size: 28px; margin-top: 4px; letter-spacing: -.02em; }
+.stat span { color: var(--muted); font-size: 13px; }
+.panel { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px; margin-bottom: 12px; }
+.panel h3 { margin: 0 0 10px; font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+.kv { display: flex; justify-content: space-between; padding: 8px 0; border-top: 1px solid var(--line); font-size: 15px; }
+.kv:first-of-type { border-top: 0; }
+.kv span:first-child { color: var(--muted); }
+
+/* Bottom tabs */
+.tabs { position: fixed; left: 0; right: 0; bottom: 0; z-index: 6; display: flex; background: color-mix(in srgb, var(--card) 94%, transparent); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); border-top: 1px solid var(--line); padding-bottom: env(safe-area-inset-bottom); }
+.tabs button { flex: 1; height: 60px; border: 0; background: none; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; font-size: 12px; font-weight: 600; color: var(--muted); }
+.tabs button[aria-selected="true"] { color: var(--red); }
+
+/* Detail sheet */
+.backdrop { position: fixed; inset: 0; background: rgba(0,0,0,.38); z-index: 10; opacity: 0; pointer-events: none; transition: opacity .2s; }
+.backdrop.open { opacity: 1; pointer-events: auto; }
+.sheet { position: fixed; left: 0; right: 0; bottom: 0; z-index: 11; max-height: 92dvh; overflow-y: auto; overscroll-behavior: contain; background: var(--bg); border-radius: 20px 20px 0 0; transform: translateY(105%); transition: transform .25s cubic-bezier(.2,.8,.2,1); padding: 0 16px calc(20px + env(safe-area-inset-bottom)); max-width: 720px; margin: 0 auto; }
+.sheet.open { transform: none; }
+.sheet-head { position: sticky; top: 0; background: var(--bg); padding: 8px 0 10px; z-index: 1; }
+.grab { width: 40px; height: 5px; border-radius: 3px; background: var(--line); margin: 0 auto 10px; }
+.sheet-title { display: flex; align-items: flex-start; gap: 10px; }
+.sheet-title h2 { flex: 1; margin: 0; font-size: 23px; line-height: 1.2; letter-spacing: -.01em; }
+.tchip { flex: none; align-self: center; padding: 6px 10px; border-radius: 999px; background: var(--red); color: var(--red-ink); font-weight: 800; font-size: 14px; }
+.x { width: 36px; height: 36px; border-radius: 50%; border: 0; background: var(--soft); font-size: 20px; line-height: 1; flex: none; }
+.meta { color: var(--muted); font-size: 14px; margin-top: 4px; }
+.block { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px; margin-top: 10px; }
+.block h3 { margin: 0 0 10px; font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+.tablebig { display: flex; align-items: center; gap: 14px; }
+.tablebig .n { width: 76px; height: 76px; border-radius: 50%; background: var(--red); color: var(--red-ink); display: grid; place-items: center; font-size: 36px; font-weight: 800; flex: none; }
+.tablebig .l { font-size: 14px; color: var(--muted); }
+.tablebig .l b { display: block; font-size: 20px; color: var(--ink); }
+.minimap svg { display: block; width: 100%; height: auto; }
+.block .btn-block { margin-top: 12px; height: 54px; font-size: 17px; }
+.slots { display: flex; flex-direction: column; gap: 6px; }
+.slot { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 54px; padding: 10px 12px; border-radius: 12px; border: 1px solid var(--line); background: var(--card); text-align: left; }
+.slot:active { background: var(--soft); }
+.slot .box { width: 28px; height: 28px; border-radius: 8px; border: 2px solid var(--line); display: grid; place-items: center; flex: none; font-weight: 800; }
+.slot-name { flex: 1; min-width: 0; font-weight: 600; font-size: 16px; }
+.slot-name small { display: block; font-weight: 500; font-size: 12px; color: var(--red); }
+.slot-meal { flex: none; padding: 4px 10px; border-radius: 999px; background: var(--soft); font-weight: 700; font-size: 14px; }
+.slot-meal.none { background: none; color: var(--muted); font-weight: 500; }
+.slot.on { background: var(--green-soft); border-color: transparent; }
+.slot.on .box { background: var(--green); border-color: var(--green); color: #fff; }
+.slot.on .slot-meal { background: none; color: var(--green); text-decoration: line-through; }
+.todo { margin-top: 10px; font-size: 14px; color: var(--muted); }
+.note { background: var(--note); border: 1px solid var(--note-line); border-radius: 12px; padding: 10px 12px; font-size: 14px; margin-top: 10px; }
+.paid { display: inline-block; padding: 2px 8px; border-radius: 6px; font-size: 12px; font-weight: 700; background: var(--green-soft); color: var(--green); }
+.unpaid { display: inline-block; padding: 2px 8px; border-radius: 6px; font-size: 12px; font-weight: 700; background: var(--soft); color: var(--muted); }
+select.field { height: 48px; font-size: 16px; }
+.linkbtn { display: block; margin: 18px auto 4px; border: 0; background: none; color: var(--muted); font-size: 13px; text-decoration: underline; padding: 8px; }
+.adminform { display: flex; gap: 8px; margin-top: 16px; }
+.adminform .field { height: 48px; font-size: 16px; }
+.adminform .btn { flex: none; height: 48px; }
+.pform label { display: block; font-size: 13px; font-weight: 600; color: var(--muted); margin-top: 12px; }
+.pform label:first-child { margin-top: 0; }
+.pform label .field { display: block; margin-top: 4px; height: 48px; font-size: 16px; color: var(--ink); }
+.pform h3 { margin-top: 18px; }
+.prow { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+.prow > span { flex: none; width: 74px; font-weight: 600; font-size: 15px; }
+.prow .field { flex: 1; min-width: 0; height: 48px; font-size: 16px; }
+.pform .btn-block { margin-top: 12px; }
+.btn-danger { color: var(--red); }
+.empty .btn { margin-top: 14px; }
+
+.toast { position: fixed; left: 50%; bottom: calc(80px + env(safe-area-inset-bottom)); transform: translateX(-50%) translateY(20px); background: var(--ink); color: var(--bg); padding: 10px 16px; border-radius: 12px; font-size: 14px; font-weight: 600; opacity: 0; pointer-events: none; transition: all .2s; z-index: 20; max-width: calc(100% - 32px); }
+.toast.show { opacity: 1; transform: translateX(-50%); }
+.spin { display: inline-block; width: 16px; height: 16px; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: spin .7s linear infinite; vertical-align: -3px; }
+@keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+
+<svg width="0" height="0" style="position:absolute">
+  <symbol id="crescent" viewBox="0 0 64 64">
+    <circle cx="27" cy="32" r="16" fill="#fff"/>
+    <circle cx="31" cy="32" r="12.8" fill="var(--red)"/>
+    <polygon fill="#fff" points="44,32 37.9,34.0 41.7,28.8 41.7,35.2 37.9,30.0"/>
+  </symbol>
+</svg>
+
+<div id="lock">
+  <form class="lock-card" id="lockForm" autocomplete="off">
+    <div class="emblem"><svg width="44" height="44"><use href="#crescent"/></svg></div>
+    <h1>Reception Check-in</h1>
+    <p>Republic Day Reception · Nov 1, 2026</p>
+    <input class="field" id="pw" type="password" placeholder="Password" autocomplete="current-password" required>
+    <button class="btn btn-primary btn-block" id="unlockBtn" type="submit">Unlock</button>
+    <div class="err" id="lockErr" role="alert"></div>
+  </form>
+</div>
+
+<div id="app" hidden>
+  <header class="top">
+    <div class="top-inner">
+      <div class="top-row">
+        <div class="brand"><div class="mini"><svg width="20" height="20"><use href="#crescent"/></svg></div><span>Check-in</span></div>
+        <button class="sync" id="syncBtn" type="button"><i class="dot"></i><span id="syncText">…</span></button>
+      </div>
+      <div class="progress"><span><b class="num" id="arrNum">0</b> / <span class="num" id="totNum">0</span> arrived</span><div class="bar"><i id="arrBar" style="width:0"></i></div></div>
+      <div class="search">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+        <input id="q" type="search" placeholder="Search name or table number" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" enterkeyhint="search">
+        <button class="clear" id="qClear" type="button" aria-label="Clear search" hidden>×</button>
+      </div>
+      <div class="chips" id="filters" role="group" aria-label="Filter">
+        <button class="chip" data-f="all" aria-pressed="true">All</button>
+        <button class="chip" data-f="waiting" aria-pressed="false">Waiting</button>
+        <button class="chip" data-f="arrived" aria-pressed="false">Arrived</button>
+        <button class="chip" data-f="partial" aria-pressed="false">Partly here</button>
+      </div>
+    </div>
+  </header>
+
+  <main id="view"></main>
+
+  <nav class="tabs" role="tablist">
+    <button role="tab" data-tab="guests" aria-selected="true">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="9" cy="8" r="4"/><path d="M2 21c0-4 3-6 7-6s7 2 7 6"/><path d="M16 4a4 4 0 0 1 0 8M22 21c0-3-1.5-5-4-5.7"/></svg>Guests</button>
+    <button role="tab" data-tab="tables" aria-selected="false">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><circle cx="12" cy="3" r="1.5"/><circle cx="12" cy="21" r="1.5"/><circle cx="3" cy="12" r="1.5"/><circle cx="21" cy="12" r="1.5"/></svg>Tables</button>
+    <button role="tab" data-tab="totals" aria-selected="false">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>Totals</button>
+  </nav>
+</div>
+
+<div class="backdrop" id="backdrop"></div>
+<section class="sheet" id="sheet" role="dialog" aria-modal="true" aria-labelledby="sheetTitle"></section>
+<div class="toast" id="toast" role="status"></div>
+
+<script>
+'use strict';
+const LS = { pw: 'rd26.pw', server: 'rd26.server', added: 'rd26.added', pending: 'rd26.pending', url: 'rd26.url', by: 'rd26.by', admin: 'rd26.admin' };
+const MEAL = { steak: 'Steak', salmon: 'Salmon', veg: 'Veg', unknown: 'Meal ?' };
+const FORM_MEAL = { steak: 'Steak', salmon: 'Salmon', veg: 'Veg', unknown: 'Meal not known (ask)', none: 'No meal (kid)' };
+const ORGS = ['TUSO (CMU)', 'TASA (Pitt)', 'TNR', 'PTAA', 'Other'];
+const GUEST_KIND = { cmu: 'CMU student', pitt: 'Pitt student', otherStudent: 'other student', adult: 'adult', kids: 'kid', unknown: 'guest' };
+// Table centres from the venue floor plan (rotated so the podium wall is at the top).
+const TABLE_POS = {
+  1: [130, 170], 2: [250, 170], 3: [410, 170], 4: [660, 170], 5: [790, 170], 6: [925, 170], 7: [1060, 170],
+  13: [130, 290], 12: [300, 290], 11: [430, 290], 10: [690, 290], 9: [820, 290], 8: [955, 290],
+  14: [215, 405], 15: [965, 410],
+};
+
+const $ = (s, el = document) => el.querySelector(s);
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const norm = (s) => String(s || '').toLocaleLowerCase('tr').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/ı/g, 'i');
+const plural = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
+const store = {
+  get(k, d) { try { const v = localStorage.getItem(k); return v === null ? d : JSON.parse(v); } catch { return d; } },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} },
+  del(k) { try { localStorage.removeItem(k); } catch {} },
+};
+
+let DATA = null, PARTIES = [], byId = {}, byName = {};
+let server = store.get(LS.server, {});
+let added = store.get(LS.added, {});
+let pending = store.get(LS.pending, {});
+let sync = { state: 'idle', lastOk: null, error: null, inflight: false };
+let ui = { tab: 'guests', filter: 'all', q: '', open: null, form: null, openTables: new Set() };
+
+/* ---------- crypto ---------- */
+const b64d = (s) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
+async function decrypt(blob, password) {
+  const base = await crypto.subtle.importKey('raw', new TextEncoder().encode(password), 'PBKDF2', false, ['deriveKey']);
+  const key = await crypto.subtle.deriveKey({ name: 'PBKDF2', salt: b64d(blob.salt), iterations: blob.iter, hash: 'SHA-256' },
+    base, { name: 'AES-GCM', length: 256 }, false, ['decrypt']);
+  const plain = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: b64d(blob.iv) }, key, b64d(blob.ct));
+  return JSON.parse(new TextDecoder().decode(plain));
+}
+
+// Table changes need a second password. The phone checks it against a PBKDF2 hash;
+// the sync backend checks it again before applying any table change.
+const isAdmin = () => !!store.get(LS.admin, '');
+async function verifyAdmin(password) {
+  const c = DATA.adminCheck;
+  const base = await crypto.subtle.importKey('raw', new TextEncoder().encode(password), 'PBKDF2', false, ['deriveBits']);
+  const bits = await crypto.subtle.deriveBits({ name: 'PBKDF2', salt: b64d(c.salt), iterations: c.iter, hash: 'SHA-256' }, base, 256);
+  return btoa(String.fromCharCode(...new Uint8Array(bits))) === c.hash;
+}
+
+async function unlock(password, quiet) {
+  const btn = $('#unlockBtn');
+  btn.disabled = true; btn.innerHTML = '<span class="spin"></span>';
+  $('#lockErr').textContent = '';
+  try {
+    const blob = await (await fetch('data.enc.json', { cache: 'no-store' })).json();
+    let data;
+    try { data = await decrypt(blob, password); }
+    catch { throw new Error('Wrong password'); }
+    store.set(LS.pw, password);
+    start(data);
+  } catch (e) {
+    if (quiet) store.del(LS.pw);
+    $('#lockErr').textContent = e.message === 'Wrong password' ? 'Wrong password.' : 'Could not load the guest list. Check your connection.';
+    btn.disabled = false; btn.textContent = 'Unlock';
+  }
+}
+
+/* ---------- state ---------- */
+// given: indexes into p.slots (one per person, 0 = registrant) who arrived and got their food ticket.
+function st(id) {
+  const s = server[id] || {}, p = pending[id] || {};
+  const given = new Set(s.given || []);
+  for (const i in p.given || {}) p.given[i] ? given.add(Number(i)) : given.delete(Number(i));
+  return { given, arrived: given.size, table: 'table' in p ? p.table : (s.table ?? null) };
+}
+const tableOf = (p) => st(p.id).table ?? p.table;
+
+// People added on a phone are stored as {name, org, table, meals: [theirs, guests'...], note}.
+function addedParty(id, s) {
+  const slots = s.meals.map((m, i) => ({ label: i ? 'Guest' : s.name, meal: m === 'none' ? null : m }));
+  const meals = { steak: 0, salmon: 0, veg: 0 };
+  slots.forEach((x) => { if (x.meal in meals) meals[x.meal]++; });
+  return {
+    id, spec: s, name: s.name, status: 'Added on a phone', org: s.org, orgLabel: s.org || 'Other', contact: null,
+    meal: slots[0].meal, guests: {}, payment: null, notes: s.note ? [s.note] : [], namedGuests: [], table: s.table, slots,
+    size: slots.length, meals, unknownMeal: slots.filter((x) => x.meal === 'unknown').length, noMeal: slots.filter((x) => !x.meal).length,
+  };
+}
+// The guest list = the built-in list + people added on the phones (server copy, then this phone's unsent changes).
+function refreshParties() {
+  const specs = { ...added };
+  for (const id in pending) {
+    if (!('party' in pending[id])) continue;
+    if (pending[id].party) specs[id] = pending[id].party; else delete specs[id];
+  }
+  PARTIES = DATA.parties.concat(Object.entries(specs).map(([id, s]) => addedParty(id, s)));
+  byId = Object.fromEntries(PARTIES.map((p) => [p.id, p]));
+}
+const seatsAtOwnTable = (p) => p.size - p.namedGuests.filter((g) => g.sitsWith).length;
+const guestTable = (p, g) => (g.sitsWith && byName[g.sitsWith] ? tableOf(byName[g.sitsWith]) : tableOf(p));
+// "Guest 1", "Guest 2", "Kid 1"… for people the form doesn't name.
+function slotLabels(p) {
+  const n = {};
+  return p.slots.map((s, i) => (i === 0 || (s.label !== 'Guest' && s.label !== 'Kid') ? s.label : `${s.label} ${(n[s.label] = (n[s.label] || 0) + 1)}`));
+}
+
+function change(id, patch, msg) {
+  const cur = pending[id] || {};
+  const next = { ...cur, ...patch };
+  if (patch.given) next.given = { ...cur.given, ...patch.given };
+  pending[id] = next;
+  store.set(LS.pending, pending);
+  render();
+  if (msg) toast(msg);
+  flush();
+}
+
+/* ---------- sync (Google Apps Script) ---------- */
+const backendUrl = () => (DATA && DATA.backendUrl) || store.get(LS.url, '');
+function deviceName() {
+  let n = store.get(LS.by, '');
+  if (!n) { n = 'phone-' + Math.random().toString(36).slice(2, 6); store.set(LS.by, n); }
+  return n;
+}
+async function call(body) {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 20000);
+  try {
+    const admin = store.get(LS.admin, '') || undefined;
+    const res = await fetch(backendUrl(), { method: 'POST', body: JSON.stringify({ token: DATA.token, admin, ...body }), signal: ctrl.signal });
+    const json = await res.json();
+    if (!json.ok) throw new Error(json.error || 'server error');
+    return json;
+  } finally { clearTimeout(timer); }
+}
+async function flush() {
+  if (!backendUrl() || sync.inflight) return;
+  const ids = Object.keys(pending);
+  const sent = {};
+  ids.forEach((id) => (sent[id] = JSON.parse(JSON.stringify(pending[id]))));
+  const labelsFor = (id) => {
+    const p = byId[id], names = p ? slotLabels(p) : [], out = {};
+    for (const i in sent[id].given || {}) out[i] = `${names[i] || 'person ' + i}${p?.slots[i]?.meal ? ' (' + MEAL[p.slots[i].meal] + ')' : ''}`;
+    return out;
+  };
+  sync.inflight = true; renderSync();
+  try {
+    const res = ids.length
+      ? await call({ action: 'update', by: deviceName(), updates: ids.map((id) => ({ id, name: byId[id]?.name, patch: sent[id], labels: labelsFor(id) })) })
+      : await call({ action: 'state' });
+    server = res.state || {};
+    store.set(LS.server, server);
+    if (res.added) { added = res.added; store.set(LS.added, added); }
+    if (res.rejected) {
+      store.del(LS.admin);
+      toast('Change refused: table-change password needed');
+    }
+    ids.forEach((id) => {
+      const cur = pending[id];
+      if (!cur) return;
+      for (const k in sent[id]) {
+        if (k === 'given') {
+          for (const i in sent[id].given) if (cur.given?.[i] === sent[id].given[i]) delete cur.given[i];
+          if (cur.given && !Object.keys(cur.given).length) delete cur.given;
+        } else if (JSON.stringify(cur[k]) === JSON.stringify(sent[id][k])) delete cur[k];
+      }
+      if (!Object.keys(cur).length) delete pending[id];
+    });
+    store.set(LS.pending, pending);
+    sync.lastOk = Date.now(); sync.error = null;
+  } catch (e) {
+    sync.error = e.name === 'AbortError' ? 'timeout' : e.message;
+  } finally {
+    sync.inflight = false;
+    render();
+  }
+  if (!sync.error && Object.keys(pending).length) flush();
+}
+setInterval(() => { if (DATA && document.visibilityState === 'visible') flush(); }, 8000);
+document.addEventListener('visibilitychange', () => { if (DATA && document.visibilityState === 'visible') flush(); });
+window.addEventListener('online', () => DATA && flush());
+
+function renderSync() {
+  const btn = $('#syncBtn'), n = Object.keys(pending).length;
+  let cls = '', text;
+  if (!backendUrl()) { text = 'This phone only'; }
+  else if (sync.inflight) { cls = 'busy'; text = 'Syncing'; }
+  else if (sync.error) { cls = 'bad'; text = n ? `Offline · ${n} unsaved` : 'Offline'; }
+  else if (n) { cls = 'busy'; text = `${n} unsaved`; }
+  else if (sync.lastOk) { cls = 'ok'; text = 'Synced'; }
+  else { text = 'Connecting'; }
+  btn.className = 'sync ' + cls;
+  $('#syncText').textContent = text;
+}
+
+/* ---------- derived ---------- */
+function partyStatus(p) {
+  const a = st(p.id).arrived;
+  return a <= 0 ? 'none' : a >= p.size ? 'full' : 'part';
+}
+function tableInfo() {
+  const info = {};
+  DATA.tables.forEach((t) => (info[t] = { seats: 0, arrived: 0, parties: [], guests: [] }));
+  PARTIES.forEach((p) => {
+    const t = tableOf(p), i = info[t];
+    if (!i) return;
+    i.seats += seatsAtOwnTable(p);
+    i.parties.push(p);
+    const given = st(p.id).given;
+    p.slots.forEach((slot, n) => { if (given.has(n)) info[guestTable(p, slot)].arrived++; });
+    p.namedGuests.forEach((g) => {
+      if (!g.sitsWith) return;
+      const gt = info[guestTable(p, g)];
+      if (gt) { gt.seats += 1; gt.guests.push({ g, host: p }); }
+    });
+  });
+  return info;
+}
+function matches(p, q) {
+  if (!q) return { ok: true };
+  if (/^\d{1,2}$/.test(q)) return { ok: tableOf(p) === Number(q) || p.namedGuests.some((g) => guestTable(p, g) === Number(q)) };
+  const nq = norm(q);
+  if (norm(p.name).includes(nq)) return { ok: true };
+  const g = p.namedGuests.find((g) => norm(g.name).includes(nq));
+  return g ? { ok: true, guest: g } : { ok: false };
+}
+
+/* ---------- rendering ---------- */
+function render() {
+  if (!DATA) return;
+  refreshParties();
+  const total = PARTIES.reduce((s, p) => s + p.size, 0);
+  const arrived = PARTIES.reduce((s, p) => s + Math.min(st(p.id).arrived, p.size), 0);
+  $('#arrNum').textContent = arrived;
+  $('#totNum').textContent = total;
+  $('#arrBar').style.width = (100 * arrived / total).toFixed(1) + '%';
+  $('#filters').hidden = ui.tab !== 'guests';
+  document.querySelectorAll('.tabs button').forEach((b) => b.setAttribute('aria-selected', b.dataset.tab === ui.tab));
+  renderSync();
+  const view = $('#view');
+  if (ui.tab === 'guests') setHTML(view, guestsView());
+  else if (ui.tab === 'tables') setHTML(view, tablesView());
+  else setHTML(view, totalsView());
+  if (ui.open) renderSheet();
+}
+
+// Only touch the DOM when the markup changed, so background syncs don't eat taps or close dropdowns.
+function setHTML(el, html) {
+  if (el._html === html) return;
+  el.innerHTML = html;
+  el._html = html;
+}
+
+function guestsView() {
+  const rows = PARTIES
+    .map((p) => ({ p, m: matches(p, ui.q.trim()) }))
+    .filter(({ p, m }) => {
+      if (!m.ok) return false;
+      const s = partyStatus(p);
+      if (ui.filter === 'waiting') return s !== 'full';
+      if (ui.filter === 'arrived') return s !== 'none';
+      if (ui.filter === 'partial') return s === 'part';
+      return true;
+    })
+    .sort((a, b) => norm(a.p.name).localeCompare(norm(b.p.name)));
+  const banner = !backendUrl() ? '<div class="banner">Sync is not set up yet, so check-ins are saved on this phone only.</div>' : '';
+  const q = ui.q.trim(), named = q && !/^\d+$/.test(q);
+  if (!rows.length) return banner + `<div class="empty">No one matches “${esc(ui.q)}”.<br>
+    <button class="btn" data-act="addform"${named ? ` data-name="${esc(q)}"` : ''}>Add ${named ? '“' + esc(q) + '”' : 'a person'} to the list</button></div>`;
+  return banner + '<div class="list">' + rows.map(({ p, m }) => {
+    const s = partyStatus(p), v = st(p.id);
+    const sub = m.guest
+      ? `<em>${esc(m.guest.name)}</em> · guest of this party · sits at table ${guestTable(p, m.guest)}`
+      : `${p.size === 1 ? 'Alone' : 'Party of ' + p.size} · ${esc(p.orgLabel)}${p.spec ? ' · added on a phone' : ''}${s === 'part' ? ' · someone still to come' : ''}`;
+    const pill = s === 'full' ? `<span class="pill full">✓ ${p.size}</span>` : `<span class="pill ${s === 'part' ? 'part' : ''}">${v.arrived}/${p.size}</span>`;
+    return `<button class="row" data-open="${p.id}"><div class="row-main"><div class="row-name">${esc(p.name)}</div><div class="row-sub">${sub}</div></div>
+      <div class="tbadge"><div><small>TABLE</small><b class="num">${tableOf(p)}</b></div></div>${pill}</button>`;
+  }).join('') + '</div><button class="linkbtn" data-act="addform">Add a person who is not on the list</button>';
+}
+
+function mapSVG({ highlight = null, info = null } = {}) {
+  const circles = DATA.tables.map((t) => {
+    const [x, y] = TABLE_POS[t];
+    const spare = t === DATA.spare && (!info || !info[t].seats);
+    let fill = 'var(--soft)', stroke = 'var(--line)', ink = 'var(--ink)';
+    if (highlight === t) { fill = 'var(--red)'; stroke = 'var(--red)'; ink = 'var(--red-ink)'; }
+    else if (info && info[t].seats) {
+      const i = info[t];
+      if (i.arrived >= i.seats) { fill = 'var(--green-soft)'; stroke = 'var(--green)'; }
+      else if (i.arrived > 0) { fill = 'var(--amber-soft)'; stroke = 'var(--amber)'; }
+    }
+    const dash = spare ? ' stroke-dasharray="8 7"' : '';
+    return `<g class="t" data-table="${t}"><circle cx="${x}" cy="${y}" r="54" fill="${spare ? 'none' : fill}" stroke="${stroke}" stroke-width="5"${dash}/>
+      <text x="${x}" y="${y + 15}" text-anchor="middle" font-size="44" font-weight="800" fill="${spare ? 'var(--muted)' : ink}">${t}</text></g>`;
+  }).join('');
+  return `<svg viewBox="20 60 1160 600" role="img" aria-label="Floor plan">
+    <rect x="30" y="70" width="1140" height="500" rx="14" fill="none" stroke="var(--line)" stroke-width="4"/>
+    <rect x="518" y="84" width="34" height="34" rx="5" fill="var(--muted)"/>
+    <text x="535" y="152" text-anchor="middle" font-size="28" fill="var(--muted)" font-weight="700">Podium</text>
+    ${circles}
+    <text x="600" y="625" text-anchor="middle" font-size="34" fill="var(--muted)" font-weight="700">▲ Entrance (stairs &amp; elevator)</text>
+  </svg>`;
+}
+
+function tablesView() {
+  const info = tableInfo();
+  const q = ui.q.trim();
+  const cards = DATA.tables.map((t) => {
+    const i = info[t];
+    if (q && !(Number(q) === t || i.parties.some((p) => matches(p, q).ok))) return '';
+    const spare = !i.seats;
+    const people = i.parties.slice().sort((a, b) => norm(a.name).localeCompare(norm(b.name))).map((p) => {
+      const s = partyStatus(p), v = st(p.id);
+      const seats = seatsAtOwnTable(p);
+      return `<li><button data-open="${p.id}"><span>${esc(p.name)} <small>${seats > 1 ? '· ' + seats + ' seats' : ''}</small></span>
+        <span class="pill ${s === 'full' ? 'full' : s === 'part' ? 'part' : ''}">${s === 'full' ? '✓ ' + p.size : v.arrived + '/' + p.size}</span></button></li>`;
+    }).concat(i.guests.map(({ g, host }) => `<li><button data-open="${host.id}"><span>${esc(g.name)} <small>· guest of ${esc(host.name)}</small></span></button></li>`)).join('');
+    const open = ui.openTables.has(t) || !!q;
+    return `<details class="tcard" id="t${t}" ${spare ? 'data-spare' : ''} ${open ? 'open' : ''}>
+      <summary data-table-card="${t}"><div class="tnum num">${t}</div><div class="tinfo"><b>${spare ? 'Spare table' : `${i.arrived} of ${i.seats} arrived`}</b>
+      <span>${spare ? 'Nobody assigned' : esc(i.parties.map((p) => p.name).concat(i.guests.map(({ g }) => g.name)).join(', '))}</span></div></summary>
+      ${spare ? '' : `<ul>${people}</ul>`}</details>`;
+  }).join('');
+  return `<a class="btn btn-primary btn-block planlink" href="oturma.html">Seating plan: every table with all names</a>
+    <div class="map">${mapSVG({ info })}</div>${cards || `<div class="empty">No table matches “${esc(q)}”.</div>`}`;
+}
+
+function totalsView() {
+  const P = PARTIES;
+  const people = P.reduce((s, p) => s + p.size, 0);
+  const arrived = P.reduce((s, p) => s + Math.min(st(p.id).arrived, p.size), 0);
+  const full = P.filter((p) => partyStatus(p) === 'full').length;
+  const ordered = { steak: 0, salmon: 0, veg: 0 }, given = { steak: 0, salmon: 0, veg: 0, unknown: 0 };
+  let noMeal = 0, unknownMeal = 0;
+  P.forEach((p) => {
+    noMeal += p.noMeal;
+    for (const k in ordered) ordered[k] += p.meals[k];
+    unknownMeal += p.unknownMeal || 0;
+    const done = st(p.id).given;
+    p.slots.forEach((slot, i) => { if (slot.meal in given && done.has(i)) given[slot.meal]++; });
+  });
+  const addedCount = P.filter((p) => p.spec).length;
+  const ago = sync.lastOk ? Math.round((Date.now() - sync.lastOk) / 1000) + ' s ago' : '—';
+  return `<div class="cards">
+    <div class="stat"><small>People here</small><b class="num">${arrived}</b><span>of ${people}</span></div>
+    <div class="stat"><small>Parties complete</small><b class="num">${full}</b><span>of ${P.length}</span></div>
+  </div>
+  <div class="panel"><h3>Meals ordered</h3>
+    ${Object.keys(ordered).map((k) => `<div class="kv"><span>${MEAL[k]}</span><b class="num">${ordered[k]}</b></div>`).join('')}
+    ${unknownMeal ? `<div class="kv"><span>People whose meal is not known yet</span><b class="num">${unknownMeal}</b></div>` : ''}
+    <div class="kv"><span>Kids with no meal choice</span><b class="num">${noMeal}</b></div>
+    ${addedCount ? `<div class="kv"><span>Includes people added on phones</span><b class="num">${addedCount}</b></div>` : ''}</div>
+  <div class="panel"><h3>Food tickets given</h3>
+    ${Object.keys(ordered).map((k) => `<div class="kv"><span>${MEAL[k]}</span><b class="num">${given[k]} / ${ordered[k]}</b></div>`).join('')}
+    ${unknownMeal ? `<div class="kv"><span>Meal asked at the door</span><b class="num">${given.unknown} / ${unknownMeal}</b></div>` : ''}</div>
+  <div class="panel"><h3>This phone</h3>
+    <div class="kv"><span>Sync</span><b>${backendUrl() ? (sync.error ? 'Offline (' + esc(sync.error) + ')' : 'Connected') : 'Not set up'}</b></div>
+    <div class="kv"><span>Last synced</span><b>${ago}</b></div>
+    <div class="kv"><span>Unsaved changes</span><b class="num">${Object.keys(pending).length}</b></div>
+    <div class="kv"><span>Name in log</span><b>${esc(deviceName())}</b></div>
+    <div class="kv"><span>Data built</span><b>${esc(DATA.builtAt.replace('T', ' '))}</b></div>
+    ${isAdmin() ? '<div class="kv"><span>Table changes</span><b>Unlocked</b></div><button class="btn btn-block" data-act="adminlock" style="margin-top:10px">Lock table changes</button>' : ''}
+    <button class="btn btn-block" data-act="rename" style="margin-top:10px">Set my name for the log</button>
+    ${DATA.backendUrl ? '' : '<button class="btn btn-block" data-act="seturl" style="margin-top:8px">Set sync URL</button>'}
+    <button class="btn btn-block" data-act="lock" style="margin-top:8px">Lock this phone</button>
+  </div>`;
+}
+
+function renderSheet() {
+  const p = byId[ui.open];
+  if (!p) return;
+  const v = st(p.id), t = tableOf(p), s = partyStatus(p);
+  const g = p.guests, guestCount = p.size - 1;
+  const kinds = Object.keys(GUEST_KIND).filter((k) => g[k]).map((k) => plural(g[k], GUEST_KIND[k]));
+  const labels = slotLabels(p);
+  const left = {};
+  p.slots.forEach((slot, i) => { if (slot.meal && !v.given.has(i)) left[slot.meal] = (left[slot.meal] || 0) + 1; });
+  const toGive = Object.keys(MEAL).filter((k) => left[k]).map((k) => `${MEAL[k]} ×${left[k]}`);
+  const moved = v.table !== null && v.table !== p.table;
+  const info = tableInfo();
+  const sheet = $('#sheet');
+  const scroll = sheet.scrollTop;
+  setHTML(sheet, `
+  <div class="sheet-head"><div class="grab"></div>
+    <div class="sheet-title"><h2 id="sheetTitle">${esc(p.name)}</h2><span class="tchip num">Table ${t}</span><button class="x" data-act="close" aria-label="Close">×</button></div>
+    <div class="meta">${esc(p.status)} · ${esc(p.orgLabel)}${p.contact ? ' · via ' + esc(p.contact) : ''}</div>
+  </div>
+
+  <div class="block">
+    <div class="tablebig"><div class="n num">${t}</div><div class="l">Table<b>${p.size === 1 ? 'No guests' : `Party of ${p.size}`}</b>${moved ? 'Moved from table ' + p.table : ''}</div></div>
+  </div>
+
+  <div class="block">
+    <h3>Tap each person as they arrive · <span class="num">${v.arrived}/${p.size}</span></h3>
+    <div class="slots">
+      ${p.slots.map((slot, i) => {
+        const on = v.given.has(i), at = guestTable(p, slot);
+        return `<button class="slot${on ? ' on' : ''}" data-act="slot" data-i="${i}" aria-pressed="${on}">
+          <span class="box">${on ? '✓' : ''}</span>
+          <span class="slot-name">${esc(labels[i])}${at !== t ? `<small>sits at table ${at}</small>` : ''}</span>
+          <span class="slot-meal${slot.meal ? '' : ' none'}">${slot.meal ? MEAL[slot.meal] : 'No meal'}</span>
+        </button>`;
+      }).join('')}
+    </div>
+    <div class="todo">${toGive.length ? 'Tickets still to give: ' + toGive.join(' · ') : 'All food tickets given'}</div>
+    ${p.size > 1 ? (s === 'full'
+      ? '<button class="btn btn-block" data-act="none">Undo: nobody arrived</button>'
+      : `<button class="btn btn-green btn-block" data-act="all">Everyone here (${p.size - v.arrived} more)</button>`) : ''}
+  </div>
+
+  <div class="block minimap">${mapSVG({ highlight: t })}</div>
+
+  ${guestCount || p.notes.length || p.namedGuests.length ? `<div class="block">
+    <h3>Party details</h3>
+    ${guestCount ? `<div>${plural(guestCount, 'guest')}${kinds.length ? ': ' + kinds.join(', ') : ''}</div>` : ''}
+    ${p.namedGuests.map((ng) => ng.note ? `<div class="note">${esc(ng.name)}: ${esc(ng.note)}</div>` : '').join('')}
+    ${p.notes.map((n) => `<div class="note">${esc(n)}</div>`).join('')}
+  </div>` : ''}
+
+  <div class="block">
+    <h3>Payment</h3>
+    ${p.payment ? `<span class="paid">${esc(p.payment)}</span>` : '<span class="unpaid">No payment recorded in the form</span>'}
+  </div>
+
+  ${isAdmin() ? `<div class="block">
+    <h3>Move party to another table</h3>
+    <select class="field" data-act="move" aria-label="Table">
+      ${DATA.tables.map((n) => `<option value="${n}" ${n === t ? 'selected' : ''}>Table ${n}${n === p.table ? ' (original)' : ''} · ${info[n].seats}/10 seats${n === DATA.spare && !info[n].seats ? ' · spare' : ''}</option>`).join('')}
+    </select>
+    ${p.spec ? '<button class="btn btn-block" data-act="editparty">Edit or remove this person</button>' : ''}
+  </div>` : ui.adminForm ? adminForm() : '<button class="linkbtn" data-act="adminform">Change table</button>'}`);
+  sheet.scrollTop = scroll;
+}
+
+const adminForm = () => `<form class="adminform" data-form="admin">
+    <input class="field" id="adminPw" type="password" placeholder="Table-change password" autocomplete="off">
+    <button class="btn" type="submit">Unlock</button>
+  </form>`;
+
+// Add / edit a person who is not on the list. Only redrawn on purpose (never by background syncs),
+// so typing isn't interrupted.
+function renderForm() {
+  const f = ui.form, info = tableInfo();
+  const mealSelect = (m) => `<select class="field" name="meal" aria-label="Meal">
+    ${Object.keys(FORM_MEAL).map((k) => `<option value="${k}" ${k === m ? 'selected' : ''}>${FORM_MEAL[k]}</option>`).join('')}</select>`;
+  setHTML($('#sheet'), `
+  <div class="sheet-head"><div class="grab"></div>
+    <div class="sheet-title"><h2 id="sheetTitle">${f.id ? 'Edit ' + esc(f.name) : 'Add a person'}</h2><button class="x" data-act="close" aria-label="Close">×</button></div>
+    <div class="meta">For someone who is not on the list. Every phone sees it after the next sync.</div>
+  </div>
+  ${isAdmin() ? `<form class="block pform" data-form="party" autocomplete="off">
+    <label>Name<input class="field" name="name" value="${esc(f.name)}" required autocapitalize="words"></label>
+    <label>Organization<select class="field" name="org">${ORGS.map((o) => `<option ${o === f.org ? 'selected' : ''}>${o}</option>`).join('')}</select></label>
+    <label>Table<select class="field" name="table">${DATA.tables.map((n) => `<option value="${n}" ${n === f.table ? 'selected' : ''}>Table ${n} · ${info[n].seats}/10 seats</option>`).join('')}</select></label>
+    <h3>People and meals</h3>
+    <div class="prow"><span>Them</span>${mealSelect(f.meals[0])}</div>
+    ${f.meals.slice(1).map((m, i) => `<div class="prow"><span>Guest ${i + 1}</span>${mealSelect(m)}<button type="button" class="x" data-act="delguest" data-i="${i + 1}" aria-label="Remove guest ${i + 1}">×</button></div>`).join('')}
+    <button type="button" class="btn btn-block" data-act="addguest">+ Add a guest</button>
+    <label>Note (optional)<input class="field" name="note" value="${esc(f.note)}"></label>
+    <button class="btn btn-primary btn-block" type="submit">${f.id ? 'Save changes' : 'Add to the list'}</button>
+    ${f.id ? '<button type="button" class="btn btn-block btn-danger" data-act="delparty">Remove this person from the list</button>' : ''}
+  </form>` : `<div class="block"><h3>Needs the table-change password</h3>${adminForm()}</div>`}`);
+}
+// Keep what was typed before redrawing the form.
+function readForm() {
+  const el = $('#sheet [data-form="party"]');
+  if (!el) return;
+  const fd = new FormData(el);
+  Object.assign(ui.form, { name: fd.get('name').trim(), org: fd.get('org'), table: Number(fd.get('table')), meals: fd.getAll('meal'), note: fd.get('note').trim() });
+}
+function openForm(f) {
+  ui.open = null;
+  ui.form = f;
+  renderForm();
+  $('#sheet').scrollTop = 0;
+  $('#sheet').classList.add('open');
+  $('#backdrop').classList.add('open');
+  document.activeElement?.blur();
+}
+
+function openSheet(id) {
+  ui.open = id;
+  ui.form = null;
+  renderSheet();
+  $('#sheet').scrollTop = 0;
+  $('#sheet').classList.add('open');
+  $('#backdrop').classList.add('open');
+  document.activeElement?.blur();
+}
+function closeSheet() {
+  ui.open = null;
+  ui.form = null;
+  ui.adminForm = false;
+  $('#sheet').classList.remove('open');
+  $('#backdrop').classList.remove('open');
+}
+
+let toastTimer;
+function toast(msg) {
+  const el = $('#toast');
+  el.textContent = msg; el.classList.add('show');
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => el.classList.remove('show'), 1800);
+}
+
+/* ---------- events ---------- */
+document.addEventListener('click', (e) => {
+  const open = e.target.closest('[data-open]');
+  if (open) { openSheet(open.dataset.open); return; }
+  const tableG = e.target.closest('.map .t');
+  if (tableG) {
+    const t = Number(tableG.dataset.table);
+    ui.openTables.add(t); render();
+    document.getElementById('t' + t)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    return;
+  }
+  const tab = e.target.closest('.tabs [data-tab]');
+  if (tab) { ui.tab = tab.dataset.tab; render(); window.scrollTo(0, 0); return; }
+  const chip = e.target.closest('#filters [data-f]');
+  if (chip) {
+    ui.filter = chip.dataset.f;
+    document.querySelectorAll('#filters .chip').forEach((c) => c.setAttribute('aria-pressed', c === chip));
+    render(); return;
+  }
+  const actEl = e.target.closest('[data-act]'), act = actEl?.dataset.act;
+  if (!act) return;
+  const p = byId[ui.open];
+  const v = p && st(p.id);
+  switch (act) {
+    case 'close': closeSheet(); break;
+    case 'addform': {
+      // Start at the table with the most free seats.
+      const info = tableInfo(), table = DATA.tables.reduce((a, b) => (info[b].seats < info[a].seats ? b : a));
+      openForm({ id: null, name: actEl.dataset.name || '', org: 'Other', table, meals: ['unknown'], note: '' });
+      break;
+    }
+    case 'editparty': openForm({ id: p.id, ...p.spec, table: tableOf(p), meals: p.spec.meals.slice() }); break;
+    case 'addguest': readForm(); ui.form.meals.push('unknown'); renderForm(); break;
+    case 'delguest': readForm(); ui.form.meals.splice(Number(actEl.dataset.i), 1); renderForm(); break;
+    case 'delparty': {
+      const f = ui.form;
+      if (!confirm(`Remove ${f.name} from the list on every phone?`)) break;
+      closeSheet();
+      change(f.id, { party: null }, `${f.name} removed from the list`);
+      break;
+    }
+    case 'slot': {
+      const i = Number(e.target.closest('[data-i]').dataset.i), slot = p.slots[i], name = slotLabels(p)[i];
+      const on = !v.given.has(i);
+      change(p.id, { given: { [i]: on } }, on
+        ? `${name}: ${slot.meal === 'unknown' ? 'ask which meal' : slot.meal ? MEAL[slot.meal] + ' ticket' : 'no meal ticket'} · table ${guestTable(p, slot)}`
+        : `${name}: undone`);
+      break;
+    }
+    case 'all': change(p.id, { given: Object.fromEntries(p.slots.map((_, i) => [i, true])) }, `${p.name}: everyone here · table ${tableOf(p)}`); break;
+    case 'none': change(p.id, { given: Object.fromEntries(p.slots.map((_, i) => [i, false])) }, 'Marked as not arrived'); break;
+    case 'lock': store.del(LS.pw); store.del(LS.admin); location.reload(); break;
+    case 'adminlock': store.del(LS.admin); render(); toast('Table changes locked'); break;
+    case 'adminform':
+      ui.adminForm = true; renderSheet();
+      $('#adminPw')?.focus();
+      break;
+    case 'rename': {
+      const n = prompt('Your name (shown in the check-in log):', deviceName());
+      if (n && n.trim()) { store.set(LS.by, n.trim().slice(0, 40)); render(); }
+      break;
+    }
+    case 'seturl': {
+      const u = prompt('Paste the Google Apps Script web app URL (ends with /exec):', store.get(LS.url, ''));
+      if (u !== null) { store.set(LS.url, u.trim()); sync.error = null; render(); flush(); }
+      break;
+    }
+  }
+});
+document.addEventListener('submit', async (e) => {
+  if (e.target.dataset.form === 'party') {
+    e.preventDefault();
+    readForm();
+    const f = ui.form;
+    if (!f.name) return;
+    const id = f.id || 'a' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+    const patch = { party: { name: f.name, org: f.org, table: f.table, meals: f.meals, note: f.note } };
+    // A table set by "Move party" would override the table chosen here.
+    if (f.id && st(id).table !== null) patch.table = null;
+    change(id, patch, `${f.name} ${f.id ? 'saved' : 'added'} · table ${f.table}`);
+    const seats = tableInfo()[f.table].seats;
+    if (seats > 10) toast(`${f.name} ${f.id ? 'saved' : 'added'} · table ${f.table} now has ${seats} people`);
+    openSheet(id);
+    return;
+  }
+  if (e.target.dataset.form !== 'admin') return;
+  e.preventDefault();
+  const pw = $('#adminPw').value;
+  if (pw && await verifyAdmin(pw)) {
+    store.set(LS.admin, pw);
+    ui.adminForm = false;
+    render();
+    if (ui.form) renderForm();
+    toast('Table changes unlocked on this phone');
+  } else {
+    $('#adminPw').value = '';
+    toast('Wrong table-change password');
+  }
+});
+document.addEventListener('change', (e) => {
+  if (e.target.dataset.act !== 'move' || !isAdmin()) return;
+  const p = byId[ui.open], n = Number(e.target.value);
+  change(p.id, { table: n === p.table ? null : n }, `${p.name} → table ${n}`);
+});
+// Remember which table cards are expanded so a background re-render keeps them open.
+document.addEventListener('toggle', (e) => {
+  if (!e.target.matches?.('.tcard') || ui.q.trim()) return;
+  const t = Number(e.target.id.slice(1));
+  if (e.target.open) ui.openTables.add(t); else ui.openTables.delete(t);
+}, true);
+$('#syncBtn').addEventListener('click', () => { sync.error = null; flush(); });
+$('#backdrop').addEventListener('click', closeSheet);
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && (ui.open || ui.form)) closeSheet(); });
+$('#q').addEventListener('input', (e) => {
+  ui.q = e.target.value;
+  $('#qClear').hidden = !ui.q;
+  if (ui.tab === 'totals') ui.tab = 'guests';
+  render();
+});
+$('#qClear').addEventListener('click', () => { $('#q').value = ''; ui.q = ''; $('#qClear').hidden = true; render(); $('#q').focus(); });
+$('#lockForm').addEventListener('submit', (e) => { e.preventDefault(); unlock($('#pw').value); });
+
+// Swipe the sheet down to close it.
+(() => {
+  const sheet = $('#sheet');
+  let y0 = null;
+  sheet.addEventListener('touchstart', (e) => { y0 = sheet.scrollTop <= 0 ? e.touches[0].clientY : null; }, { passive: true });
+  sheet.addEventListener('touchend', (e) => {
+    if (y0 !== null && e.changedTouches[0].clientY - y0 > 90) closeSheet();
+    y0 = null;
+  });
+})();
+
+function start(data) {
+  DATA = data;
+  byName = Object.fromEntries(DATA.parties.map((p) => [p.name, p]));
+  $('#lock').hidden = true;
+  $('#app').hidden = false;
+  render();
+  flush();
+  // Forget a table-change password this phone saved before it was changed.
+  const adm = store.get(LS.admin, '');
+  if (adm) verifyAdmin(adm).then((ok) => { if (!ok) { store.del(LS.admin); render(); } });
+}
+
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+const saved = store.get(LS.pw, '');
+if (saved) unlock(saved, true);
+</script>
+</body>
+</html>

@@ -1,0 +1,255 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<meta name="theme-color" content="#c8102e">
+<title>Oturma Düzeni</title>
+<style>
+:root {
+  --bg: #f5f3f0; --card: #ffffff; --ink: #1c1b1f; --muted: #6c6a72; --line: #e5e1dc; --soft: #efece8;
+  --red: #c8102e; --red-soft: #fbe7ea;
+  --o-TUSO: #c8102e; --o-TASA: #2459b8; --o-TNR: #1d7f4a; --o-PTAA: #7a3db8; --o-Protocol: #a46207; --o-Pitt: #0e7c86; --on-org: #ffffff;
+  --radius: 14px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #141316; --card: #1f1e22; --ink: #f1eff3; --muted: #a29fa8; --line: #34323a; --soft: #2a2830;
+    --red: #e5394f; --red-soft: #3a1a20;
+    --o-TUSO: #ef5b6d; --o-TASA: #6c9cf0; --o-TNR: #4cc287; --o-PTAA: #b48cf0; --o-Protocol: #f0b44c; --o-Pitt: #5cc8d2; --on-org: #141316;
+  }
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; background: var(--bg); color: var(--ink); }
+body { font: 16px/1.4 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, sans-serif; -webkit-font-smoothing: antialiased; }
+button, input { font: inherit; color: inherit; }
+[hidden] { display: none !important; }
+.num { font-variant-numeric: tabular-nums; }
+.wrap { max-width: 1100px; margin: 0 auto; padding: 0 16px; }
+
+#lock { min-height: 100dvh; display: grid; place-items: center; padding: 24px 16px; }
+.lock-card { width: 100%; max-width: 360px; text-align: center; }
+.lock-card h1 { font-size: 22px; margin: 0 0 4px; }
+.lock-card p { color: var(--muted); margin: 0 0 22px; font-size: 14px; }
+.field { width: 100%; height: 52px; border: 1px solid var(--line); border-radius: 12px; background: var(--card); padding: 0 16px; font-size: 17px; outline: none; }
+.field:focus { border-color: var(--red); box-shadow: 0 0 0 3px var(--red-soft); }
+.btn { width: 100%; height: 50px; margin-top: 12px; border-radius: 12px; border: 0; background: var(--red); color: #fff; font-weight: 600; cursor: pointer; }
+.err { color: var(--red); font-size: 14px; min-height: 20px; margin-top: 10px; }
+
+header { padding: calc(18px + env(safe-area-inset-top)) 0 6px; }
+.back { display: inline-block; margin-bottom: 8px; color: var(--red); font-weight: 600; font-size: 15px; text-decoration: none; }
+header h1 { margin: 0; font-size: 26px; letter-spacing: -.01em; }
+header p { margin: 4px 0 0; color: var(--muted); font-size: 14px; }
+.bar { position: sticky; top: 0; z-index: 3; background: color-mix(in srgb, var(--bg) 92%, transparent); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); padding: 10px 0; }
+.search { position: relative; }
+.search input { width: 100%; height: 46px; border-radius: 12px; border: 1px solid var(--line); background: var(--card); padding: 0 40px 0 40px; font-size: 17px; outline: none; -webkit-appearance: none; }
+.search input::-webkit-search-cancel-button { -webkit-appearance: none; }
+.search input:focus { border-color: var(--red); box-shadow: 0 0 0 3px var(--red-soft); }
+.search svg { position: absolute; left: 12px; top: 13px; color: var(--muted); }
+.search button { position: absolute; right: 4px; top: 4px; width: 38px; height: 38px; border: 0; background: none; color: var(--muted); font-size: 22px; cursor: pointer; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 14px; margin: 10px 0 0; font-size: 13px; color: var(--muted); }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.legend i { width: 12px; height: 12px; border-radius: 50%; background: var(--c); }
+
+.map { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 8px; margin: 6px 0 14px; }
+.map svg { display: block; width: 100%; height: auto; max-height: 420px; }
+.map .t { cursor: pointer; }
+
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 10px; padding-bottom: 32px; }
+.tcard { background: var(--card); border: 1px solid var(--line); border-top: 4px solid var(--c); border-radius: var(--radius); padding: 12px 14px; scroll-margin-top: 80px; }
+.tcard.flash { box-shadow: 0 0 0 3px var(--c); }
+.thead { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
+.tnum { width: 42px; height: 42px; border-radius: 50%; background: var(--c); color: var(--on-org); display: grid; place-items: center; font-weight: 800; font-size: 19px; flex: none; }
+.thead b { display: block; font-size: 17px; }
+.thead small { color: var(--muted); font-size: 13px; }
+.tcard ul { list-style: none; margin: 0; padding: 0; }
+.tcard li { display: flex; justify-content: space-between; gap: 10px; padding: 7px 0; border-top: 1px solid var(--line); font-size: 15px; }
+.tcard li:first-child { border-top: 0; }
+.tcard li .plus { color: var(--muted); white-space: nowrap; font-weight: 600; }
+.tcard li small { display: block; color: var(--muted); font-size: 12px; }
+mark { background: var(--red-soft); color: inherit; border-radius: 3px; padding: 0 2px; }
+.empty { text-align: center; color: var(--muted); padding: 40px 0; grid-column: 1 / -1; }
+footer { color: var(--muted); font-size: 12px; text-align: center; padding: 0 0 24px; }
+
+@media print {
+  .bar, footer { display: none; }
+  body { background: #fff; }
+  .grid { grid-template-columns: repeat(3, 1fr); gap: 6px; }
+  .tcard { break-inside: avoid; padding: 8px 10px; }
+  .tcard li { padding: 3px 0; font-size: 12px; }
+  .map svg { max-height: 300px; }
+  * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+}
+</style>
+</head>
+<body>
+
+<div id="lock">
+  <form class="lock-card" id="lockForm" autocomplete="off">
+    <h1>Oturma Düzeni</h1>
+    <p>Cumhuriyet Bayramı Resepsiyonu · 1 Kasım 2026</p>
+    <input class="field" id="pw" type="password" placeholder="Şifre" required>
+    <button class="btn" id="unlockBtn" type="submit">Aç</button>
+    <div class="err" id="lockErr" role="alert"></div>
+  </form>
+</div>
+
+<div id="app" hidden>
+  <div class="wrap">
+    <header>
+      <a class="back" id="back" href="./" hidden>← Check-in</a>
+      <h1>Oturma Düzeni</h1>
+      <p>Cumhuriyet Bayramı Resepsiyonu · 1 Kasım 2026 · <span id="summary" class="num"></span></p>
+    </header>
+    <div class="bar">
+      <div class="search">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+        <input id="q" type="search" placeholder="İsim veya masa numarası ara" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
+        <button id="qClear" type="button" aria-label="Temizle" hidden>×</button>
+      </div>
+      <div class="legend" id="legend"></div>
+    </div>
+    <div class="map" id="map"></div>
+    <div class="grid" id="grid"></div>
+  </div>
+  <footer>Son güncelleme: <span id="built"></span></footer>
+</div>
+
+<script>
+'use strict';
+// Table centres from the venue floor plan (rotated so the podium wall is at the top).
+const TABLE_POS = {
+  1: [130, 170], 2: [250, 170], 3: [410, 170], 4: [660, 170], 5: [790, 170], 6: [925, 170], 7: [1060, 170],
+  13: [130, 290], 12: [300, 290], 11: [430, 290], 10: [690, 290], 9: [820, 290], 8: [955, 290],
+  14: [215, 405], 15: [965, 410],
+};
+const ORG_KEY = (label) => (label || '').split(' ')[0];
+
+const $ = (s) => document.querySelector(s);
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const norm = (s) => String(s || '').toLocaleLowerCase('tr').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/ı/g, 'i');
+let BASE = null, DATA = null, q = '', lastView = '';
+
+const b64d = (s) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
+async function decrypt(blob, password) {
+  const base = await crypto.subtle.importKey('raw', new TextEncoder().encode(password), 'PBKDF2', false, ['deriveKey']);
+  const key = await crypto.subtle.deriveKey({ name: 'PBKDF2', salt: b64d(blob.salt), iterations: blob.iter, hash: 'SHA-256' },
+    base, { name: 'AES-GCM', length: 256 }, false, ['decrypt']);
+  const plain = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: b64d(blob.iv) }, key, b64d(blob.ct));
+  return JSON.parse(new TextDecoder().decode(plain));
+}
+
+async function unlock(secret) {
+  const btn = $('#unlockBtn');
+  btn.disabled = true; btn.textContent = 'Açılıyor…';
+  $('#lockErr').textContent = '';
+  try {
+    const file = await (await fetch('oturma.enc.json', { cache: 'no-store' })).json();
+    for (const slot of file.slots) {
+      try { return start(await decrypt(slot, secret)); } catch {}
+    }
+    $('#lockErr').textContent = 'Şifre yanlış.';
+  } catch {
+    $('#lockErr').textContent = 'Liste yüklenemedi. İnternet bağlantını kontrol et.';
+  }
+  btn.disabled = false; btn.textContent = 'Aç';
+}
+
+function start(data) {
+  BASE = DATA = data;
+  $('#lock').hidden = true;
+  $('#app').hidden = false;
+  show(false);
+  if (BASE.live) {
+    live();
+    setInterval(() => { if (document.visibilityState === 'visible') live(); }, 60000);
+  }
+}
+
+function show(isLive) {
+  const people = DATA.tables.reduce((s, t) => s + t.people.reduce((a, p) => a + 1 + p.plus, 0), 0);
+  $('#summary').textContent = `${DATA.tables.length} masa · ${people} kişi`;
+  $('#built').textContent = DATA.builtAt.replace('T', ' ').replace('+00:00', ' UTC') + (isLive ? ' · telefonlardaki değişiklikler dahil' : '');
+  const orgs = [...new Set(DATA.tables.map((t) => t.org))];
+  $('#legend').innerHTML = orgs.map((o) => `<span style="--c:var(--o-${ORG_KEY(o)})"><i></i>${esc(o)}</span>`).join('');
+  render();
+}
+
+// Table moves and people added on the check-in phones (names and tables only).
+async function live() {
+  try {
+    const res = await (await fetch(BASE.live.url, { method: 'POST', body: JSON.stringify({ action: 'view', key: BASE.live.key }) })).json();
+    if (!res.ok || JSON.stringify(res.view) === lastView) return;
+    lastView = JSON.stringify(res.view);
+    const { moves, added } = res.view;
+    const org = Object.fromEntries(BASE.tables.map((t) => [t.n, t.org]));
+    const all = BASE.tables.flatMap((t) => t.people.map((p) => ({ ...p, n: moves[p.id || p.with] || t.n })));
+    added.forEach((a) => all.push({ name: a.name, plus: a.plus, note: '', n: a.table }));
+    const tables = {};
+    all.forEach((p) => (tables[p.n] ||= { n: p.n, org: org[p.n] || '', people: [] }).people.push(p));
+    DATA = { ...BASE, tables: Object.values(tables).sort((a, b) => a.n - b.n) };
+    show(true);
+  } catch {}
+}
+
+const seatsOf = (t) => t.people.reduce((a, p) => a + 1 + p.plus, 0);
+function highlight(name) {
+  if (!q || /^\d+$/.test(q)) return esc(name);
+  const i = norm(name).indexOf(norm(q));
+  if (i < 0) return esc(name);
+  return esc(name.slice(0, i)) + '<mark>' + esc(name.slice(i, i + q.length)) + '</mark>' + esc(name.slice(i + q.length));
+}
+function visible(t) {
+  if (!q) return true;
+  if (/^\d+$/.test(q)) return t.n === Number(q);
+  return t.people.some((p) => norm(p.name).includes(norm(q)));
+}
+
+function render() {
+  const shown = new Set(DATA.tables.filter(visible).map((t) => t.n));
+  $('#map').innerHTML = `<svg viewBox="20 60 1160 600" role="img" aria-label="Salon planı">
+    <rect x="30" y="70" width="1140" height="500" rx="14" fill="none" stroke="var(--line)" stroke-width="4"/>
+    <rect x="518" y="84" width="34" height="34" rx="5" fill="var(--muted)"/>
+    <text x="535" y="152" text-anchor="middle" font-size="28" fill="var(--muted)" font-weight="700">Kürsü</text>
+    ${DATA.tables.map((t) => {
+      const [x, y] = TABLE_POS[t.n];
+      const c = `var(--o-${ORG_KEY(t.org)})`;
+      const dim = shown.has(t.n) ? 1 : 0.25;
+      return `<g class="t" data-table="${t.n}" opacity="${dim}"><circle cx="${x}" cy="${y}" r="54" fill="${c}" stroke="${c}" stroke-width="4"/>
+        <text x="${x}" y="${y + 15}" text-anchor="middle" font-size="44" font-weight="800" fill="var(--on-org)">${t.n}</text></g>`;
+    }).join('')}
+    <text x="600" y="625" text-anchor="middle" font-size="34" fill="var(--muted)" font-weight="700">▲ Giriş (merdiven ve asansör)</text>
+  </svg>`;
+  const cards = DATA.tables.filter(visible).map((t) => `
+    <section class="tcard" id="t${t.n}" style="--c:var(--o-${ORG_KEY(t.org)})">
+      <div class="thead"><div class="tnum num">${t.n}</div><div><b>Masa ${t.n}</b><small>${esc(t.org)} · ${seatsOf(t)} kişi</small></div></div>
+      <ul>${t.people.slice().sort((a, b) => norm(a.name).localeCompare(norm(b.name))).map((p) => `
+        <li><span>${highlight(p.name)}${p.note ? `<small>${esc(p.note)}</small>` : ''}</span>${p.plus ? `<span class="plus num">+${p.plus}</span>` : ''}</li>`).join('')}
+      </ul>
+    </section>`).join('');
+  $('#grid').innerHTML = cards || `<div class="empty">“${esc(q)}” bulunamadı.</div>`;
+}
+
+document.addEventListener('click', (e) => {
+  const g = e.target.closest('.map .t');
+  if (!g) return;
+  const card = document.getElementById('t' + g.dataset.table);
+  if (!card) return;
+  card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  card.classList.add('flash');
+  setTimeout(() => card.classList.remove('flash'), 1200);
+});
+$('#q').addEventListener('input', (e) => { q = e.target.value.trim(); $('#qClear').hidden = !q; render(); });
+$('#qClear').addEventListener('click', () => { $('#q').value = ''; q = ''; $('#qClear').hidden = true; render(); $('#q').focus(); });
+$('#lockForm').addEventListener('submit', (e) => { e.preventDefault(); unlock($('#pw').value); });
+
+// Opens straight away from the share link (#code), or on a phone already unlocked on the check-in page.
+const code = decodeURIComponent(location.hash.slice(1));
+let savedPw = '';
+try { savedPw = JSON.parse(localStorage.getItem('rd26.pw') || '""'); } catch {}
+if (!code && savedPw) $('#back').hidden = false;
+if (code || savedPw) unlock(code || savedPw);
+</script>
+</body>
+</html>
